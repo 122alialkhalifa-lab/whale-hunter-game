@@ -21,7 +21,9 @@ const BINANCE_BASE = 'https://fapi.binance.com';
 const BINANCE_WS_STREAM_BASE = 'wss://fstream.binance.com/market/stream?streams=';
 const BINANCE_WS_DISCOVERY_URL = 'wss://fstream.binance.com/market/ws/!miniTicker@arr';
 const ALL_SYMBOLS_SENTINEL = 'ALL_BINANCE_USDT';
-const MAX_SYMBOLS = Number(process.env.MAX_SYMBOLS || 900);
+const BTC_ONLY_SYMBOL = 'BTCUSDT';
+const BITCOIN_ONLY_MODE = true;
+const MAX_SYMBOLS = 1;
 const WS_SUBSCRIBE_CHUNK = Number(process.env.WS_SUBSCRIBE_CHUNK || 180);
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 9000);
 const SYMBOL_DELAY_MS = Number(process.env.SYMBOL_DELAY_MS || 20);
@@ -48,8 +50,8 @@ let liveHiveTimer = null;
 let scientistThinkTimer = null;
 
 const defaultConfig = Object.freeze({
-  // ALL_BINANCE_USDT = automatic all Binance USDⓈ-M Futures USDT symbols via WebSocket discovery.
-  symbols: [ALL_SYMBOLS_SENTINEL],
+  // Bitcoin-only mode: every bot, pattern, equation, log, and alert is locked to BTCUSDT.
+  symbols: [BTC_ONLY_SYMBOL],
   whaleUsd: 30000,
   minScore: 70,
   windowSec: 60,
@@ -141,7 +143,7 @@ app.get('/health', (_req, res) => {
     running,
     scanning,
     timestamp: Date.now(),
-    service: 'Whale Hunter Quant Proof V14',
+    service: 'Whale Hunter Bitcoin Quant Proof V15',
     websocketConnected: wsState.connected,
     publicHealthOnly: true
   });
@@ -268,8 +270,9 @@ app.get('/state', requireViewer, (_req, res) => {
     scientistHiveV11: true,
     livingScientistLoop: true,
     tenMinuteLeverageSprint: true,
-    quantProofV13: true,
-    successFormulaLogsV14: true,
+    quantProofV15: true,
+    successFormulaLogsV15: true,
+    bitcoinOnlyV15: true,
     accessControl: true,
     minProofSamples: MIN_PROOF_SAMPLES,
     perfectAlertOnly: PERFECT_ALERT_ONLY,
@@ -2449,7 +2452,7 @@ async function initValidSymbols() {
   // REST exchangeInfo is optional only. If Binance blocks REST from a cloud IP,
   // the game still runs and validates symbols with a safe USDT suffix pattern.
   try {
-    log('api', 'V13 Quant Proof access-control mode: optional exchangeInfo validation starting. REST is not used for scans.');
+    log('api', 'V15 Bitcoin Quant Proof mode: optional exchangeInfo validation starting. REST is not used for scans.');
     const data = await binanceJson('/fapi/v1/exchangeInfo');
     const symbols = Array.isArray(data.symbols) ? data.symbols : [];
     validSymbols = new Set(
@@ -2467,12 +2470,12 @@ async function initValidSymbols() {
       log('loadout', `Rejected invalid/default symbols: ${normalized.rejected.join(', ')}`);
     }
     ensureTradeStreams(config.symbols);
-    if (isAllSymbolsRequest(config.symbols)) subscribeAllKnownSymbols('exchangeInfo');
+    // Bitcoin-only mode: no all-symbol subscription.
     broadcast('config', { config, rejected: normalized.rejected, warnings: normalized.warnings, timestamp: Date.now() });
   } catch (error) {
     validSymbols = new Set();
     exchangeInfoLoadedAt = null;
-    log('api-error', `Optional exchangeInfo validation skipped: ${error.message || error}. V6 will continue with WebSocket data and USDT symbol format checks.`);
+    log('api-error', `Optional exchangeInfo validation skipped: ${error.message || error}. V15 will continue with BTCUSDT WebSocket data.`);
     const normalized = await normalizeConfig(config);
     config = normalized.config;
     ensureTradeStreams(config.symbols);
@@ -2481,48 +2484,18 @@ async function initValidSymbols() {
 }
 
 async function normalizeConfig(raw) {
-  const warnings = [];
+  const warnings = ['Bitcoin-only mode enabled: all symbols are locked to BTCUSDT. All 500 bots, proofs, equations, logs, alerts, and paper trades study Bitcoin only.'];
   const rejected = [];
 
-  let symbols = Array.isArray(raw.symbols)
+  const rawSymbols = Array.isArray(raw.symbols)
     ? raw.symbols
     : String(raw.symbols || '').split(/[\s,]+/);
-
-  symbols = [...new Set(symbols
-    .map(s => String(s || '').trim().toUpperCase())
-    .filter(Boolean)
-  )];
-
-  if (!symbols.length) symbols = defaultConfig.symbols.slice();
-
-  const wantsAll = symbols.some(s => isAllSymbolToken(s));
-  if (wantsAll) {
-    symbols = [ALL_SYMBOLS_SENTINEL];
-    warnings.push(`ALL BINANCE mode enabled: the server will discover and subscribe to all active Binance USDⓈ-M USDT symbols by WebSocket, up to ${MAX_SYMBOLS}.`);
-  } else {
-    if (symbols.length > MAX_SYMBOLS) {
-      warnings.push(`Symbol list trimmed to max ${MAX_SYMBOLS}.`);
-      symbols = symbols.slice(0, MAX_SYMBOLS);
-    }
-
-    if (validSymbols.size > 0) {
-      const before = symbols;
-      symbols = before.filter(s => validSymbols.has(s));
-      rejected.push(...before.filter(s => !validSymbols.has(s)));
-    } else {
-      const before = symbols;
-      symbols = before.filter(s => /^[A-Z0-9]{2,30}USDT$/.test(s));
-      rejected.push(...before.filter(s => !/^[A-Z0-9]{2,30}USDT$/.test(s)));
-      warnings.push('REST symbol validation unavailable; V13 is using safe USDT symbol format checks and Binance WebSocket streams.');
-    }
-
-    if (symbols.length === 0) {
-      symbols = [ALL_SYMBOLS_SENTINEL];
-      warnings.push('No valid symbols supplied; ALL BINANCE mode restored.');
-    }
+  for (const sym of rawSymbols) {
+    const clean = String(sym || '').trim().toUpperCase();
+    if (clean && clean !== BTC_ONLY_SYMBOL) rejected.push(clean);
   }
 
-  const whaleUsd = clampNumber(raw.whaleUsd, 100, 10000000, defaultConfig.whaleUsd);
+  const whaleUsd = clampNumber(raw.whaleUsd, 100, 100000000, defaultConfig.whaleUsd);
   const minScore = clampNumber(raw.minScore, 1, 100, defaultConfig.minScore);
   const windowSec = clampNumber(raw.windowSec, 10, 600, defaultConfig.windowSec);
   const intervalSec = clampNumber(raw.intervalSec, 3, 300, defaultConfig.intervalSec);
@@ -2531,7 +2504,7 @@ async function normalizeConfig(raw) {
 
   return {
     config: {
-      symbols,
+      symbols: [BTC_ONLY_SYMBOL],
       whaleUsd,
       minScore,
       windowSec,
@@ -2539,51 +2512,30 @@ async function normalizeConfig(raw) {
       arenaHorizonSec,
       maxFakeLeverage
     },
-    rejected,
+    rejected: [...new Set(rejected)],
     warnings
   };
 }
 
-function isAllSymbolToken(token) {
-  const s = String(token || '').trim().toUpperCase();
-  return s === ALL_SYMBOLS_SENTINEL || s === 'ALL' || s === 'ALLUSDT' || s === 'ALL_BINANCE' || s === 'ALL_BINANCE_FUTURES' || s === '*' || s === 'AUTO';
+function isAllSymbolToken(_token) {
+  return false;
 }
 
-function isAllSymbolsRequest(symbols) {
-  return (Array.isArray(symbols) ? symbols : [symbols]).some(isAllSymbolToken);
+function isAllSymbolsRequest(_symbols) {
+  return false;
 }
 
-function describeLoadout(cfg = config) {
-  if (isAllSymbolsRequest(cfg.symbols)) {
-    const active = getScanSymbols(cfg).length;
-    return `ALL BINANCE USDT Futures mode (${active || 'discovering'} active, cap ${MAX_SYMBOLS})`;
-  }
-  return `${(cfg.symbols || []).length} symbols`;
+function describeLoadout(_cfg = config) {
+  return 'Bitcoin-only mode: BTCUSDT';
 }
 
-function getScanSymbols(cfg = config) {
-  if (isAllSymbolsRequest(cfg.symbols)) {
-    const preferred = [...wsState.subscribedSymbols].filter(s => tradeBuffers.has(s));
-    const fallback = [...wsState.discoveredSymbols].filter(s => tradeBuffers.has(s));
-    const source = preferred.length ? preferred : fallback;
-    return source.filter(s => /^[A-Z0-9]{2,30}USDT$/.test(s)).sort().slice(0, MAX_SYMBOLS);
-  }
-  return [...new Set((cfg.symbols || [])
-    .map(s => String(s || '').trim().toUpperCase())
-    .filter(s => /^[A-Z0-9]{2,30}USDT$/.test(s))
-  )].slice(0, MAX_SYMBOLS);
+function getScanSymbols(_cfg = config) {
+  return [BTC_ONLY_SYMBOL];
 }
 
-function ensureTradeStreams(symbols) {
-  const wantsAll = isAllSymbolsRequest(symbols);
-  if (wantsAll) return ensureAllBinanceTradeStreams();
-
-  const clean = [...new Set((symbols || [])
-    .map(s => String(s || '').trim().toUpperCase())
-    .filter(s => /^[A-Z0-9]{2,30}USDT$/.test(s))
-  )].slice(0, MAX_SYMBOLS);
+function ensureTradeStreams(_symbols) {
+  const clean = [BTC_ONLY_SYMBOL];
   const key = clean.join(',');
-  if (!clean.length) return;
   if (wsState.key === key && wsState.mode === 'selected' && (wsState.connected || wsState.ws)) return;
 
   closeTradeStream();
@@ -2591,9 +2543,8 @@ function ensureTradeStreams(symbols) {
   wsState.mode = 'selected';
   wsState.subscribedSymbols = new Set(clean);
   wsState.discoveredSymbols = new Set(clean);
-  for (const symbol of clean) {
-    if (!tradeBuffers.has(symbol)) tradeBuffers.set(symbol, []);
-  }
+  wsState.pendingSubscribe = [];
+  if (!tradeBuffers.has(BTC_ONLY_SYMBOL)) tradeBuffers.set(BTC_ONLY_SYMBOL, []);
 
   const streams = clean.map(symbol => `${symbol.toLowerCase()}@aggTrade`).join('/');
   const url = `${BINANCE_WS_STREAM_BASE}${streams}`;
@@ -2602,23 +2553,13 @@ function ensureTradeStreams(symbols) {
 }
 
 function ensureAllBinanceTradeStreams() {
-  const key = ALL_SYMBOLS_SENTINEL;
-  if (wsState.key === key && wsState.mode === 'all' && (wsState.connected || wsState.ws)) return;
-
-  closeTradeStream();
-  wsState.key = key;
-  wsState.mode = 'all';
-  wsState.subscribedSymbols = new Set();
-  wsState.discoveredSymbols = new Set();
-  wsState.pendingSubscribe = [];
-  wsState.url = BINANCE_WS_DISCOVERY_URL;
-  openBinanceSocket(BINANCE_WS_DISCOVERY_URL, [ALL_SYMBOLS_SENTINEL], 'all');
+  ensureTradeStreams([BTC_ONLY_SYMBOL]);
 }
 
 function openBinanceSocket(url, labelSymbols, mode) {
   const ws = new WebSocket(url, {
     handshakeTimeout: REQUEST_TIMEOUT_MS,
-    headers: { 'User-Agent': 'WhaleHunterRadar/10.0 hive-scientists-paper-monitoring-only' }
+    headers: { 'User-Agent': 'WhaleHunterRadar/15.0 bitcoin-quant-proof-monitoring-only' }
   });
   wsState.ws = ws;
   wsState.connected = false;
@@ -2627,7 +2568,7 @@ function openBinanceSocket(url, labelSymbols, mode) {
     wsState.connected = true;
     wsState.lastMessageAt = Date.now();
     if (mode === 'all') {
-      log('stream', `ALL BINANCE mode online. Discovering USDT Futures symbols from !miniTicker@arr, then subscribing to aggTrade streams up to ${MAX_SYMBOLS}.`);
+      log('stream', `Bitcoin-only mode online. Subscribed to BTCUSDT Futures aggTrade stream.`);
       if (validSymbols.size) subscribeAllKnownSymbols('exchangeInfo-ready');
     } else {
       log('stream', `Binance Futures WebSocket connected for ${labelSymbols.length} selected symbol(s).`);
@@ -2745,7 +2686,7 @@ function subscribeAggTradeSymbols(symbols, reason = 'subscribe') {
     }, index * 180);
   });
 
-  log('stream', `Subscribed ${clean.length} aggTrade stream(s) from ${reason}. Active all-symbol coverage: ${wsState.subscribedSymbols.size}/${MAX_SYMBOLS}.`);
+  log('stream', `Subscribed ${clean.length} BTCUSDT aggTrade stream(s) from ${reason}. Bitcoin-only coverage active.`);
   broadcast('stream', {
     connected: wsState.connected,
     mode: wsState.mode,
@@ -2758,7 +2699,7 @@ function subscribeAggTradeSymbols(symbols, reason = 'subscribe') {
 
 function ingestAggTrade(event) {
   const symbol = String(event.s || '').toUpperCase();
-  if (!symbol) return;
+  if (!symbol || symbol !== BTC_ONLY_SYMBOL) return;
   const price = Number(event.p);
   const qty = Number(event.q);
   const time = Number(event.T || event.E || Date.now());
@@ -2874,6 +2815,6 @@ app.listen(PORT, () => {
     running = true;
     scheduleNextScan(9000);
   }
-  log('server', `Whale Hunter Quant Proof Scientists V14 online on port ${PORT}. Server-side autonomous quant-proof fake-leverage sprint: 500 bots, $1000 fake each, ALL Binance WebSocket mode. Page is viewer only. Monitoring only. No API keys. No real trading.`);
+  log('server', `Whale Hunter Bitcoin Quant Proof V15 online on port ${PORT}. Bitcoin-only BTCUSDT autonomous quant-proof fake-leverage sprint: 500 bots, $1000 fake each. Page is viewer only. Monitoring only. No API keys. No real trading.`);
   broadcast('status', { running, scanning, autostart: AUTOSTART, timestamp: Date.now() });
 });

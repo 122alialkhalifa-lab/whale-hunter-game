@@ -1,20 +1,23 @@
-# Whale Hunter Quant Proof V14
+# Whale Hunter Bitcoin Quant Proof V15
 
-Arabic/English game-style Binance USDⓈ-M Futures monitoring lab.
+Bitcoin-only edition.
 
-V14 adds a **Successful Equation Logs** dashboard:
+Everything is locked to **BTCUSDT**:
 
-- Every winning paper-trade equation is saved as a copyable log.
-- Dashboard panel: `Successful Equation Logs / سجل المعادلات الناجحة`.
-- One-click copy for each equation.
-- `COPY ALL` copies the filtered successful equations.
-- `OPEN TXT` opens a plain-text log you can select/copy/share.
-- API endpoints:
-  - `GET /formula-success-logs`
-  - `GET /formula-success-logs.txt`
-- Owner export now includes `successfulFormulaLogs`.
+- 500 scientist bots
+- paper/fake $1000 balances
+- fake leverage simulation
+- mathematical pattern proof engine
+- Perfect-So-Far alerts
+- Successful Equation Logs
+- dashboard access permissions
+- `/formula-success-logs` and `/formula-success-logs.txt`
 
-Important: these logs are paper-simulation records only. Prices and market data are real Binance public futures data, but no real orders are placed.
+Market data source:
+
+- Real Binance USDⓈ-M Futures WebSocket data for `BTCUSDT@aggTrade`
+- Prices, trade flow, buy/sell pressure, and indicators are calculated from real public market data.
+- Paper positions, PnL, fake USD, and leverage are simulation only.
 
 ## Login codes
 
@@ -54,6 +57,20 @@ Start Command:
 node server.mjs
 ```
 
+## Health check
+
+Use this for cron-job.org or uptime ping:
+
+```text
+/health
+```
+
+You want to see:
+
+```json
+{ "ok": true, "websocketConnected": true }
+```
+
 ## Safety
 
 - Monitoring and paper-simulation only.
@@ -61,3 +78,4 @@ node server.mjs
 - No real buy/sell orders.
 - No guaranteed profit claims.
 - Visible warning remains: leverage can wipe accounts.
+- `100%` means perfect inside the app's recorded paper-simulation history so far, not guaranteed future profit.

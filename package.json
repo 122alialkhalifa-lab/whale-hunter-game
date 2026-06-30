@@ -1,7 +1,7 @@
 {
-  "name": "whale-hunter-quant-proof-v14",
-  "version": "14.0.0",
-  "description": "Game-style Binance Futures quant-proof paper arena with successful equation logs.",
+  "name": "whale-hunter-bitcoin-quant-proof-v15",
+  "version": "15.0.0",
+  "description": "Bitcoin-only game-style Binance Futures quant-proof paper arena with successful equation logs and access control.",
   "type": "module",
   "main": "server.mjs",
   "scripts": {
@@ -16,13 +16,13 @@
     "ws": "^8.18.0"
   },
   "keywords": [
-    "binance",
-    "futures",
+    "bitcoin",
+    "btcusdt",
+    "binance-futures",
     "pwa",
     "sse",
     "radar",
     "monitoring",
-    "game",
     "paper-trading-simulation",
     "fake-money",
     "scientist-bots",

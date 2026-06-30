@@ -1,7 +1,7 @@
 {
-  "name": "Whale Hunter Quant Proof V14",
-  "short_name": "QuantProofV14",
-  "description": "Game-style Binance Futures whale-flow mathematical proof lab. Monitoring and paper simulation only.",
+  "name": "Whale Hunter Bitcoin Quant Proof V15",
+  "short_name": "BTCProofV15",
+  "description": "Bitcoin-only Binance Futures mathematical proof lab. Real BTCUSDT market data, paper simulation only.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

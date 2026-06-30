@@ -1,4 +1,4 @@
-const CACHE_NAME = 'whale-hunter-radar-game-v2';
+const CACHE_NAME = 'whale-hunter-bitcoin-quant-proof-v15';
 const APP_SHELL = [
   '/',
   '/index.html',

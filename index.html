@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Whale Hunter Quant Proof V14</title>
+  <title>Whale Hunter Bitcoin Quant Proof V15</title>
   <meta name="theme-color" content="#00e5ff" />
   <link rel="manifest" href="/manifest.json" />
   <style>
@@ -63,14 +63,14 @@
   <main class="wrap">
     <section class="top">
       <div class="hero">
-        <h1>👑 Whale Hunter Quant Proof V14</h1>
-        <div class="sub">مختبر رياضي حي: كل عملة مسألة، كل Bot عالم، وكل معادلة ناجحة تُحفظ في Log قابل للنسخ.</div>
+        <h1>₿ Whale Hunter Bitcoin Quant Proof V15</h1>
+        <div class="sub">مختبر رياضي حي لعملة واحدة فقط: BTCUSDT. كل Bot، كل معادلة، كل Pattern، وكل Log يدرس Bitcoin فقط.</div>
         <div class="safe">مراقبة وتداول وهمي فقط. ليست توصية مالية. الرافعة قد تصفّر الحساب.</div>
         <div class="rolebar">
           <span id="roleBadge" class="pill yellow">GUEST</span>
           <span id="serverBadge" class="pill red">OFFLINE</span>
           <span id="wsBadge" class="pill">WS ...</span>
-          <span id="coinsBadge" class="pill">Coins 0</span>
+          <span id="coinsBadge" class="pill">BTC 0</span>
           <span id="proofBadge" class="pill green">Perfect 0</span>
         </div>
       </div>
@@ -93,7 +93,7 @@
       </div>
 
       <div class="card wide">
-        <h2>🧠 Coin Proof Lab / مختبر العملات</h2>
+        <h2>₿ Bitcoin Proof Lab / مختبر بتكوين</h2>
         <div class="stats">
           <div class="stat"><span>Total Fake Bank</span><b id="bank">$0</b></div>
           <div class="stat"><span>Open Paper Positions</span><b id="openPos">0</b></div>
@@ -111,7 +111,7 @@
       </div>
 
       <div class="card half">
-        <h2>📈 Top 100 Live Signals</h2>
+        <h2>📈 BTCUSDT Live Signal</h2>
         <div id="signals" class="list"></div>
       </div>
       <div class="card half">
@@ -123,7 +123,7 @@
         <h2>📜 Successful Equation Logs / سجل المعادلات الناجحة</h2>
         <div class="tiny">كل معادلة تنتهي بربح وهمي تُحفظ هنا. تقدر تبحث، تنسخ سطر واحد، تنسخ الكل، أو تفتح ملف TXT مباشر.</div>
         <div class="toolbar">
-          <input id="successSearch" placeholder="بحث: SOLUSDT أو BIG_BUY أو اسم Bot" oninput="loadSuccessLogs()" />
+          <input id="successSearch" placeholder="بحث داخل BTCUSDT: BIG_BUY أو اسم Bot أو معادلة" oninput="loadSuccessLogs()" />
           <button onclick="loadSuccessLogs()">REFRESH</button>
           <button onclick="copyAllSuccessLogs()">COPY ALL</button>
           <button onclick="openSuccessTxt()">OPEN TXT</button>
@@ -143,7 +143,7 @@
       <div class="card full">
         <h2>🛠️ Owner Settings / إعدادات المالك</h2>
         <div class="settings">
-          <div><label>Symbols</label><textarea id="symbols">ALL_BINANCE_USDT</textarea></div>
+          <div><label>Symbol Locked</label><textarea id="symbols" readonly>BTCUSDT</textarea></div>
           <div><label>Whale USD</label><input id="whaleUsd" type="number" value="30000"></div>
           <div><label>Min Score</label><input id="minScore" type="number" value="70"></div>
           <div><label>Window Sec</label><input id="windowSec" type="number" value="60"></div>
@@ -179,11 +179,11 @@ function handleEvent(ev,d){ if(ev==='hello'){ state=d; if(d.hive) renderHive(d.h
  if(ev==='symbol'){ updateRadar(d.signal); }
 }
 async function refresh(){ try{ const s=await api('/state'); state=s; renderState(s); const p=await api('/proof'); proof=p.proof; renderProof(proof); await loadSuccessLogs(false); }catch(e){ log('refresh failed: '+e.message); if(String(e.message).includes('AUTH')) $('login').classList.remove('hidden'); } }
-function renderState(s){ $('serverBadge').textContent=s.running?'LIVE':'IDLE'; $('serverBadge').className='pill '+(s.running?'green':'yellow'); $('wsBadge').textContent=s.websocket?.connected?'WS LIVE':'WS OFF'; $('wsBadge').className='pill '+(s.websocket?.connected?'green':'red'); $('coinsBadge').textContent='Coins '+(s.config?.activeSymbolCount||s.websocket?.subscribedSymbols||0); if(s.config){$('symbols').value=(s.config.symbols||[]).join('\n'); $('whaleUsd').value=s.config.whaleUsd; $('minScore').value=s.config.minScore; $('windowSec').value=s.config.windowSec; $('arenaHorizonSec').value=s.config.arenaHorizonSec;} if(s.hive) renderHive(s.hive); if(s.arena) renderArena(s.arena); if(s.lastScan) renderSignals(s.lastScan.results||[]); }
+function renderState(s){ $('serverBadge').textContent=s.running?'LIVE':'IDLE'; $('serverBadge').className='pill '+(s.running?'green':'yellow'); $('wsBadge').textContent=s.websocket?.connected?'WS LIVE':'WS OFF'; $('wsBadge').className='pill '+(s.websocket?.connected?'green':'red'); $('coinsBadge').textContent='BTC '+(s.websocket?.connected?'LIVE':'WAIT'); if(s.config){$('symbols').value='BTCUSDT'; $('whaleUsd').value=s.config.whaleUsd; $('minScore').value=s.config.minScore; $('windowSec').value=s.config.windowSec; $('arenaHorizonSec').value=s.config.arenaHorizonSec;} if(s.hive) renderHive(s.hive); if(s.arena) renderArena(s.arena); if(s.lastScan) renderSignals(s.lastScan.results||[]); }
 function renderHive(h){ $('bank').textContent=fmtUsd(h.fakeBank?.totalEquity); $('openPos').textContent=h.fakeBank?.openPositions||0; $('reports').textContent=(h.totalFormulaReports||0)+' / ✅ '+(h.successfulFormulaLogCount||0); if(h.successfulFormulaLogs) renderSuccessLogs(h.successfulFormulaLogs); $('minProof').textContent=h.proof?.minProofSamples||25; renderPatterns(h.topPatterns||[]); renderWeights({weights:h.topWeights||[],consensus:h.mathConsensus}); renderMathReports(h.formulaReports||[]); if(h.proof) renderProof(h.proof); }
 function renderArena(a){ /* reserved */ }
-function renderProof(p){ if(!p) return; $('proofBadge').textContent='Perfect '+(p.counts?.perfect||p.perfect?.length||0); $('minProof').textContent=p.minProofSamples||25; const list=$('perfectList'); const arr=p.perfect||[]; if(arr.length>lastPerfectCount && sound) beep(); lastPerfectCount=arr.length; list.innerHTML= arr.length? arr.map(x=>`<div class="alert"><strong>${x.alert}</strong> <span class="ltr">${x.symbol}</span> ${x.direction}<br><span class="tiny">${x.tag} · wins ${x.wins}/${x.games} · avg ${x.avgPnl}</span><div class="eq">${x.equation}</div></div>`).join('') : '<div class="muted">لا يوجد نمط 100% حتى الآن. الخلية ما زالت تبحث وتفشل وتعدل.</div>'; const coins=$('coinBrains'); const c=p.coinBrains||[]; coins.innerHTML=c.length? c.slice(0,30).map(x=>`<div class="row"><div class="left"><div class="symbol">${x.symbol}</div><span class="tiny">Patterns ${x.patterns} · Perfect ${x.perfect} · Games ${x.games} · Best ${x.bestProof?.toFixed?x.bestProof.toFixed(1):x.bestProof}</span><div class="bar"><div class="fill" style="width:${Math.min(100,x.understanding||0)}%"></div></div></div><b>${x.understanding}</b></div>`).join('') : '<div class="muted">تحتاج صفقات وهمية محلولة أكثر حتى تظهر Coin Brains.</div>'; }
-function renderSignals(results){ const el=$('signals'); el.innerHTML=results.slice(0,100).map(s=>`<div class="row"><div class="left"><div class="symbol">${s.symbol}</div><span class="tiny">Score ${s.score} · Price ${Number(s.price||0).toPrecision(7)} · Buy ${pct((s.buyPct||0)*100)} · Δ ${pct(s.priceChangePct)}</span><div>${(s.tags||[]).slice(0,4).map(t=>`<span class="tag ${t.includes('SELL')?'red':t.includes('BUY')?'green':'yellow'}">${t}</span>`).join('')}</div><div class="bar"><div class="fill" style="width:${s.score||0}%"></div></div></div><b>${s.hot?'🔥':'👀'}</b></div>`).join('') || '<div class="muted">بانتظار أول Scan.</div>'; }
+function renderProof(p){ if(!p) return; $('proofBadge').textContent='Perfect '+(p.counts?.perfect||p.perfect?.length||0); $('minProof').textContent=p.minProofSamples||25; const list=$('perfectList'); const arr=p.perfect||[]; if(arr.length>lastPerfectCount && sound) beep(); lastPerfectCount=arr.length; list.innerHTML= arr.length? arr.map(x=>`<div class="alert"><strong>${x.alert}</strong> <span class="ltr">${x.symbol}</span> ${x.direction}<br><span class="tiny">${x.tag} · wins ${x.wins}/${x.games} · avg ${x.avgPnl}</span><div class="eq">${x.equation}</div></div>`).join('') : '<div class="muted">لا يوجد نمط 100% حتى الآن. الخلية ما زالت تبحث وتفشل وتعدل.</div>'; const coins=$('coinBrains'); const c=p.coinBrains||[]; coins.innerHTML=c.length? c.filter(x=>x.symbol==='BTCUSDT').slice(0,1).map(x=>`<div class="row"><div class="left"><div class="symbol">${x.symbol}</div><span class="tiny">Patterns ${x.patterns} · Perfect ${x.perfect} · Games ${x.games} · Best ${x.bestProof?.toFixed?x.bestProof.toFixed(1):x.bestProof}</span><div class="bar"><div class="fill" style="width:${Math.min(100,x.understanding||0)}%"></div></div></div><b>${x.understanding}</b></div>`).join('') : '<div class="muted">تحتاج صفقات وهمية محلولة أكثر حتى تظهر Coin Brains.</div>'; }
+function renderSignals(results){ const el=$('signals'); el.innerHTML=results.filter(x=>x.symbol==='BTCUSDT').slice(0,1).map(s=>`<div class="row"><div class="left"><div class="symbol">${s.symbol}</div><span class="tiny">Score ${s.score} · Price ${Number(s.price||0).toPrecision(7)} · Buy ${pct((s.buyPct||0)*100)} · Δ ${pct(s.priceChangePct)}</span><div>${(s.tags||[]).slice(0,4).map(t=>`<span class="tag ${t.includes('SELL')?'red':t.includes('BUY')?'green':'yellow'}">${t}</span>`).join('')}</div><div class="bar"><div class="fill" style="width:${s.score||0}%"></div></div></div><b>${s.hot?'🔥':'👀'}</b></div>`).join('') || '<div class="muted">بانتظار أول Scan.</div>'; }
 function renderPatterns(arr){ $('patterns').innerHTML=arr.slice(0,24).map(p=>`<div class="row"><div class="left"><div class="symbol">${p.key}</div><span class="tiny">W ${p.wins} / L ${p.losses} · ${pct((p.winRate||0)*100)} · pnl ${Number(p.pnl||0).toFixed(1)}</span><div class="bar"><div class="fill" style="width:${Math.min(100,(p.winRate||0)*100)}%"></div></div></div><b>${p.losses===0?'👑':'🧪'}</b></div>`).join('') || '<div class="muted">لا يوجد Patterns بعد.</div>'; }
 function renderWeights(d){ const weights=d.weights||d.topWeights||[]; $('weights').innerHTML=(d.consensus?`<div class="alert"><strong>Collective:</strong><div class="eq">${d.consensus.equation||''}</div><div class="tiny">${d.consensus.teaching||''}</div></div>`:'') + weights.slice(0,20).map(w=>`<div class="row"><div class="left"><div class="symbol">${w.feature}</div><span class="tiny">weight ${Number(w.weight||0).toFixed(4)} · updates ${w.stats?.updates||0}</span><div class="bar"><div class="fill" style="width:${Math.min(100,Math.abs(w.weight||0)*120)}%"></div></div></div><b>${(w.weight||0)>=0?'▲':'▼'}</b></div>`).join(''); }
 function renderMathReports(arr){ $('mathReports').innerHTML=arr.slice(0,24).map(r=>mathReportHTML(r)).join('') || '<div class="muted">بانتظار تقارير العلماء.</div>'; }
@@ -195,15 +195,15 @@ function successLogHTML(x){ if(!x) return ''; const line=(x.copyLine||'').replac
 function renderSuccessLogs(arr){ successLogs=arr||successLogs||[]; const el=$('successLogs'); if(!el) return; el.innerHTML=(successLogs||[]).slice(0,80).map(successLogHTML).join('') || '<div class="muted">لا توجد معادلات ناجحة محفوظة بعد. انتظر إغلاق صفقات وهمية رابحة.</div>'; }
 function addSuccessLog(x){ if(!x) return; successLogs.unshift(x); successLogs=successLogs.slice(0,200); renderSuccessLogs(successLogs); }
 let successLoadTimer=null;
-async function loadSuccessLogs(immediate=true){ clearTimeout(successLoadTimer); const run=async()=>{ try{ const q=encodeURIComponent(($('successSearch')?.value||'').trim()); const d=await api('/formula-success-logs?limit=200'+(q?'&q='+q:'')); renderSuccessLogs(d.logs||[]); }catch(e){ if(immediate) log('success logs failed: '+e.message); } }; if(immediate) successLoadTimer=setTimeout(run,250); else await run(); }
-async function copyAllSuccessLogs(){ try{ const q=encodeURIComponent(($('successSearch')?.value||'').trim()); const d=await api('/formula-success-logs?limit=500'+(q?'&q='+q:'')); await copyText(d.text||''); log('copied '+(d.returned||0)+' successful equation log(s)'); }catch(e){ log('copy all failed: '+e.message); } }
-function openSuccessTxt(){ const q=encodeURIComponent(($('successSearch')?.value||'').trim()); window.open('/formula-success-logs.txt?limit=500'+(q?'&q='+q:''),'_blank'); }
+async function loadSuccessLogs(immediate=true){ clearTimeout(successLoadTimer); const run=async()=>{ try{ const q=encodeURIComponent(($('successSearch')?.value||'BTCUSDT').trim()||'BTCUSDT'); const d=await api('/formula-success-logs?limit=200&symbol=BTCUSDT'+(q&&q!=='BTCUSDT'?'&q='+q:'')); renderSuccessLogs(d.logs||[]); }catch(e){ if(immediate) log('success logs failed: '+e.message); } }; if(immediate) successLoadTimer=setTimeout(run,250); else await run(); }
+async function copyAllSuccessLogs(){ try{ const q=encodeURIComponent(($('successSearch')?.value||'BTCUSDT').trim()||'BTCUSDT'); const d=await api('/formula-success-logs?limit=500&symbol=BTCUSDT'+(q&&q!=='BTCUSDT'?'&q='+q:'')); await copyText(d.text||''); log('copied '+(d.returned||0)+' successful equation log(s)'); }catch(e){ log('copy all failed: '+e.message); } }
+function openSuccessTxt(){ const q=encodeURIComponent(($('successSearch')?.value||'BTCUSDT').trim()||'BTCUSDT'); window.open('/formula-success-logs.txt?limit=500&symbol=BTCUSDT'+(q&&q!=='BTCUSDT'?'&q='+q:''),'_blank'); }
 async function copyText(t){ try{ await navigator.clipboard.writeText(t||''); log('copied to clipboard'); }catch{ const ta=document.createElement('textarea'); ta.value=t||''; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); log('copied'); } }
 function updateRadar(s){ const r=$('radar'); const b=document.createElement('i'); b.className='blip '+(s.hot?'hot':''); const angle=Math.random()*Math.PI*2, rad=35+Math.random()*78; b.style.left=`calc(50% + ${Math.cos(angle)*rad}px)`; b.style.top=`calc(50% + ${Math.sin(angle)*rad}px)`; b.title=s.symbol; r.appendChild(b); setTimeout(()=>b.remove(),4500); }
 async function ownerPost(url){ try{ const r=await api(url,{method:'POST',body:'{}'}); log(url+' ok'); refresh(); }catch(e){ log('OWNER ACTION FAILED: '+e.message); } }
-async function saveConfig(){ const body={ symbols:$('symbols').value.split(/[\s,]+/).filter(Boolean), whaleUsd:+$('whaleUsd').value, minScore:+$('minScore').value, windowSec:+$('windowSec').value, arenaHorizonSec:+$('arenaHorizonSec').value }; try{await api('/config',{method:'POST',body:JSON.stringify(body)}); log('settings saved'); refresh();}catch(e){log('save failed: '+e.message)} }
+async function saveConfig(){ const body={ symbols:['BTCUSDT'], whaleUsd:+$('whaleUsd').value, minScore:+$('minScore').value, windowSec:+$('windowSec').value, arenaHorizonSec:+$('arenaHorizonSec').value }; try{await api('/config',{method:'POST',body:JSON.stringify(body)}); log('settings saved'); refresh();}catch(e){log('save failed: '+e.message)} }
 async function resetLab(){ if(!confirm('Reset lab?')) return; try{await api('/admin/reset-lab',{method:'POST',body:'{}'}); log('lab reset'); refresh();}catch(e){log('reset failed: '+e.message)} }
-async function exportLab(){ try{ const d=await api('/admin/export'); const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='whale-hunter-quant-proof-v14-export.json'; a.click(); URL.revokeObjectURL(a.href);}catch(e){log('export failed: '+e.message)} }
+async function exportLab(){ try{ const d=await api('/admin/export'); const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='whale-hunter-bitcoin-quant-proof-v15-export.json'; a.click(); URL.revokeObjectURL(a.href);}catch(e){log('export failed: '+e.message)} }
 function toggleSound(){ sound=!sound; $('soundBtn').textContent=sound?'SOUND ON':'SOUND'; if(sound) beep(); }
 function beep(){ try{ const ctx=new (window.AudioContext||window.webkitAudioContext)(); const o=ctx.createOscillator(); const g=ctx.createGain(); o.frequency.value=740; o.connect(g); g.connect(ctx.destination); g.gain.setValueAtTime(.0001,ctx.currentTime); g.gain.exponentialRampToValueAtTime(.16,ctx.currentTime+.02); g.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+.16); o.start(); o.stop(ctx.currentTime+.18); }catch{} }
 if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(()=>{});} checkAuth();
