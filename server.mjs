@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'node:path';
+import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
@@ -69,7 +70,16 @@ const contestants = createContestants(CONTESTANT_COUNT);
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '96kb' }));
-app.use(express.static(path.join(__dirname, 'public'), {
+
+// iPad/GitHub web uploads sometimes flatten the /public folder.
+// This server supports both layouts:
+// 1) normal: /public/index.html
+// 2) iPad easy upload: /index.html at repository root
+const PUBLIC_DIR = fs.existsSync(path.join(__dirname, 'public', 'index.html'))
+  ? path.join(__dirname, 'public')
+  : __dirname;
+
+app.use(express.static(PUBLIC_DIR, {
   maxAge: '2h',
   setHeaders(res, filePath) {
     if (filePath.endsWith('sw.js')) res.setHeader('Cache-Control', 'no-cache');
@@ -77,7 +87,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
 }));
 
 app.get('/', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
 });
 
 app.get('/health', (_req, res) => {
