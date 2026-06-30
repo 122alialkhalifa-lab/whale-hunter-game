@@ -1481,13 +1481,16 @@ function createLearningState(style) {
 }
 
 function createHiveMemory() {
+  const successFormulaLogs = [];
   return {
     startedAt: Date.now(),
     lessons: [],
     reviews: [],
     broadcasts: [],
     formulaReports: [],
-    successfulFormulaLogs: [],
+    // Keep both names as aliases so old/new dashboard code cannot crash.
+    successFormulaLogs,
+    successfulFormulaLogs: successFormulaLogs,
     scientistDebates: [],
     liveThoughts: [],
     mathWeights: new Map(),
@@ -1509,7 +1512,9 @@ function resetHiveMemory() {
   hiveMemory.reviews = [];
   hiveMemory.broadcasts = [];
   hiveMemory.formulaReports = [];
-  hiveMemory.successFormulaLogs = [];
+  const successFormulaLogs = [];
+  hiveMemory.successFormulaLogs = successFormulaLogs;
+  hiveMemory.successfulFormulaLogs = successFormulaLogs;
   hiveMemory.scientistDebates = [];
   hiveMemory.liveThoughts = [];
   hiveMemory.mathWeights = new Map();
