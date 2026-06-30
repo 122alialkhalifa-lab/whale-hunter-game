@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="WhaleHunter" />
-  <title>Whale Hunter Radar — Hive Mind Paper Arena</title>
+  <title>Whale Hunter Radar — Hive Scientists V10</title>
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   <style>
@@ -1191,6 +1191,8 @@
     .hive-row b { display:block; font-size:15px; line-height:1.35; }
     .hive-row small { display:block; color:var(--muted); margin-top:3px; line-height:1.35; }
     .hive-score { direction:ltr; font-weight:1000; color:var(--green); text-align:left; }
+    .formula-line { direction:ltr; display:block; margin-top:6px; color:#e5fbff; font-weight:1000; font-size:12px; letter-spacing:.01em; }
+    .formula-terms { direction:ltr; display:block; margin-top:4px; color:var(--yellow); font-size:11px; font-weight:900; }
     .hive-empty { border:1px dashed rgba(0,229,255,.22); border-radius:18px; padding:18px; color:var(--muted); text-align:center; line-height:1.7; }
     .money-up { color:var(--green) !important; }
     .money-down { color:var(--red) !important; }
@@ -1318,8 +1320,8 @@
     <section class="hive-shell" aria-label="Hive Mind Paper Money Intelligence">
       <div class="hive-head">
         <div>
-          <h2>🐝 خلية النحل الذكية — Hive Mind Paper Arena</h2>
-          <p>كل روبوت يبدأ بـ <b>$1000 وهمية</b>. يفتح مراكز وهمية فقط داخل اللعبة على أسعار حقيقية، يتعلم من الربح والخسارة، ثم يشارك القاعدة مع باقي الخلية. لا توجد أوامر Binance، لا أموال حقيقية، ولا توصيات دخول.</p>
+          <h2>🐝 خلية علماء الرياضيات — Hive Scientists V10</h2>
+          <p>كل روبوت يبدأ بـ <b>$1000 وهمية</b>. يتصرف كعالم رياضيات: يفتح مركزًا وهميًا، يرسل معادلته لحظيًا، ثم عند الربح أو الخسارة يرسل برهانًا رياضيًا والـ 499 روبوت يتعلمون منه فورًا. لا أوامر Binance ولا أموال حقيقية.</p>
         </div>
         <div class="hive-chip" id="hiveChip">500 × $1000 FAKE</div>
       </div>
@@ -1328,6 +1330,7 @@
         <div class="hive-stat"><span>Total PnL</span><strong id="hivePnl">$0</strong></div>
         <div class="hive-stat"><span>Open Fake Positions</span><strong id="hiveOpenPositions">0</strong></div>
         <div class="hive-stat"><span>Learned Lessons</span><strong id="hiveLessonsCount">0</strong></div>
+        <div class="hive-stat"><span>Formula Reports</span><strong id="hiveFormulaCount">0</strong></div>
       </div>
       <div class="hive-grid">
         <div class="hive-board">
@@ -1345,6 +1348,14 @@
         <div class="hive-board">
           <h3>Pattern Brain / عقل الأنماط</h3>
           <div id="hivePatterns" class="hive-empty">تظهر هنا أقوى تركيبات المؤشرات حسب نتائج الروبوتات الوهمية.</div>
+        </div>
+        <div class="hive-board">
+          <h3>Live Math Reports / تقارير العلماء لحظيًا</h3>
+          <div id="hiveFormulas" class="hive-empty">كل Bot سيرسل معادلة C = 50 + 38Σ(wᵢ·xᵢ) قبل القرار، ثم Δwᵢ = η·R·xᵢ بعد الربح أو الخسارة.</div>
+        </div>
+        <div class="hive-board">
+          <h3>Collective Equation / معادلة الخلية</h3>
+          <div id="hiveConsensus" class="hive-empty">الخلية تنتظر أول برهان حتى تبدأ تعديل الأوزان جماعيًا.</div>
         </div>
       </div>
     </section>
@@ -1454,10 +1465,13 @@
       hivePnl: document.getElementById('hivePnl'),
       hiveOpenPositions: document.getElementById('hiveOpenPositions'),
       hiveLessonsCount: document.getElementById('hiveLessonsCount'),
+      hiveFormulaCount: document.getElementById('hiveFormulaCount'),
       hiveRules: document.getElementById('hiveRules'),
       hiveReviews: document.getElementById('hiveReviews'),
       hiveCoins: document.getElementById('hiveCoins'),
       hivePatterns: document.getElementById('hivePatterns'),
+      hiveFormulas: document.getElementById('hiveFormulas'),
+      hiveConsensus: document.getElementById('hiveConsensus'),
       startBtn: document.getElementById('startBtn'),
       scanBtn: document.getElementById('scanBtn'),
       saveBtn: document.getElementById('saveBtn'),
@@ -1496,7 +1510,7 @@
       connectEvents();
       await refreshHealth();
       registerServiceWorker();
-      addLog({ type: 'hud', message: 'Game monitor armed. Press SOUND once to unlock iPad audio, then START HUNT or SONAR PULSE.', timestamp: Date.now() });
+      addLog({ type: 'hud', message: 'Live Hive armed. السيرفر يعمل تلقائيًا؛ الصفحة شاشة مشاهدة فقط. اضغط SOUND للصوت أو START HUNT للتأكيد.', timestamp: Date.now() });
     }
 
     function bindControls() {
@@ -1576,6 +1590,10 @@
       eventSource.addEventListener('scan', evt => applyScan(parseEvent(evt), true));
       eventSource.addEventListener('arena', evt => { const arena = parseEvent(evt); renderArena(arena); if (arena?.hive) renderHive(arena.hive); });
       eventSource.addEventListener('hive', evt => renderHive(parseEvent(evt)));
+      eventSource.addEventListener('hive-live', evt => { const data = parseEvent(evt); if (data?.hive) renderHive(data.hive); if (data?.arena) renderArena(data.arena); });
+      eventSource.addEventListener('hive-share', evt => { const data = parseEvent(evt); if (data?.hive) renderHive(data.hive); if (data?.broadcast) addLog({ type: 'hive', message: data.broadcast.message || 'Hive shared a live rule', timestamp: data.timestamp || Date.now() }); });
+      eventSource.addEventListener('math-report', evt => { const data = parseEvent(evt); if (data?.hive) renderHive(data.hive); if (data?.report) addLog({ type: 'math', message: data.report.message || 'Scientist bot published an equation', timestamp: data.timestamp || Date.now() }); });
+      eventSource.addEventListener('hive-learn', evt => { const data = parseEvent(evt); if (data?.consensus) addLog({ type: 'hive', message: data.consensus.teaching || 'Hive updated collective equation', timestamp: data.timestamp || Date.now() }); });
       eventSource.addEventListener('bot-tick', evt => renderBotSwarm(parseEvent(evt)));
       eventSource.addEventListener('log', evt => addLog(parseEvent(evt)));
     }
@@ -1901,6 +1919,7 @@
       }
       if (els.hiveOpenPositions) els.hiveOpenPositions.textContent = String(bank.openPositions || 0);
       if (els.hiveLessonsCount) els.hiveLessonsCount.textContent = String((hive?.lessons || []).length);
+      if (els.hiveFormulaCount) els.hiveFormulaCount.textContent = String(hive?.totalFormulaReports || (hive?.formulaReports || []).length || 0);
 
       const rules = hive?.sharedRules || [];
       els.hiveRules.innerHTML = rules.length ? rules.slice(0, 6).map(rule => `
@@ -1929,6 +1948,25 @@
           <div><b>${escapeHtml(p.key || 'pattern')}</b><small>${p.wins}/${p.games} wins · win-rate ${Math.round((p.winRate || 0) * 100)}% · fake PnL ${fmtUsd(p.pnl || 0)}</small></div>
           <div class="hive-score">${Math.round(p.edge || 0)}</div>
         </div>`).join('') : `<div class="hive-empty">عقل الأنماط ينتظر نتائج كافية من الصفقات الوهمية.</div>`;
+
+      const formulas = hive?.formulaReports || [];
+      if (els.hiveFormulas) {
+        els.hiveFormulas.innerHTML = formulas.length ? formulas.slice(0, 7).map(r => `
+          <div class="hive-row">
+            <div><b>${escapeHtml(r.callsign || 'Scientist Bot')} · ${escapeHtml(r.symbol || '')}</b><small>${escapeHtml(r.phase || r.kind || '')} · ${escapeHtml(r.result || '')} · ${r.pnl != null ? fmtUsd(r.pnl) : ''}</small><span class="formula-line">${escapeHtml(r.equation || '')}</span><span class="formula-terms">${(r.terms || []).slice(0,4).map(t => `${escapeHtml(t.feature)}:${Number(t.product ?? t.gradient ?? t.value ?? 0).toFixed(2)}`).join(' · ')}</span></div>
+            <div class="hive-score ${r.result === 'LOSS' ? 'money-down' : 'money-up'}">${escapeHtml(r.kind || 'MATH')}</div>
+          </div>`).join('') : `<div class="hive-empty">لا توجد معادلات منشورة بعد. انتظر فتح أول قرارات وهمية.</div>`;
+      }
+
+      const consensus = hive?.mathConsensus || null;
+      const weights = hive?.topWeights || [];
+      if (els.hiveConsensus) {
+        els.hiveConsensus.innerHTML = consensus ? `
+          <div class="hive-row">
+            <div><b>Version ${escapeHtml(consensus.version || 0)} · Collective Brain</b><small>${escapeHtml(consensus.teaching || '')}</small><span class="formula-line">${escapeHtml(consensus.equation || '')}</span><span class="formula-terms">${weights.slice(0,7).map(w => `${escapeHtml(w.feature)}:${Number(w.weight || 0).toFixed(3)}`).join(' · ') || 'no shared weights yet'}</span></div>
+            <div class="hive-score">Σw</div>
+          </div>` : `<div class="hive-empty">الخلية تنتظر أول برهان حتى تبدأ تعديل الأوزان جماعيًا.</div>`;
+      }
     }
 
     function directionClass(value) {

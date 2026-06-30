@@ -1,7 +1,7 @@
 {
   "name": "whale-hunter-radar",
-  "version": "8.0.0",
-  "description": "Game-first iPad PWA for Binance USD-M Futures whale-flow monitoring with 500 autonomous hive-mind paper-money bots. Fake money only, no trading.",
+  "version": "10.0.0",
+  "description": "Game-first iPad PWA for Binance USD-M Futures whale-flow monitoring with 500 autonomous scientist bots that share live mathematical paper-trade equations. Fake money only, no trading.",
   "type": "module",
   "main": "server.mjs",
   "scripts": {
@@ -30,7 +30,11 @@
     "hive-mind",
     "paper-trading-simulation",
     "fake-money",
-    "learning-bots"
+    "learning-bots",
+    "scientist-bots",
+    "mathematical-learning",
+    "collective-intelligence",
+    "live-formulas"
   ],
   "author": "",
   "license": "MIT"

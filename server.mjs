@@ -26,6 +26,11 @@ const PAPER_FEE_BPS = Number(process.env.PAPER_FEE_BPS || 4);
 const MAX_PAPER_RISK = Number(process.env.MAX_PAPER_RISK || 0.34);
 const LESSON_LOOKBACK_MS = Number(process.env.LESSON_LOOKBACK_MS || 180000);
 const BOT_TICK_MS = Number(process.env.BOT_TICK_MS || 1100);
+const AUTOSTART = String(process.env.AUTOSTART || 'true').toLowerCase() !== 'false';
+const LIVE_HIVE_PUSH_MS = Number(process.env.LIVE_HIVE_PUSH_MS || 3000);
+const HIVE_LEARNING_RATE = Number(process.env.HIVE_LEARNING_RATE || 0.035);
+const HIVE_REPORT_MAX = Number(process.env.HIVE_REPORT_MAX || 220);
+let liveHiveTimer = null;
 
 const defaultConfig = Object.freeze({
   // ALL_BINANCE_USDT = automatic all Binance USDⓈ-M Futures USDT symbols via WebSocket discovery.
@@ -33,8 +38,8 @@ const defaultConfig = Object.freeze({
   whaleUsd: 30000,
   minScore: 70,
   windowSec: 60,
-  intervalSec: 8,
-  arenaHorizonSec: 3600
+  intervalSec: 5,
+  arenaHorizonSec: 300
 });
 
 const strategyDeck = Object.freeze([
@@ -148,7 +153,41 @@ app.get('/arena', (_req, res) => {
 });
 
 app.get('/hive', (_req, res) => {
-  res.json({ ok: true, hive: getHiveSnapshot(), timestamp: Date.now() });
+  res.json({ ok: true, hive: getHiveSnapshot(), arena: getArenaSnapshot(), running, timestamp: Date.now() });
+});
+
+app.get('/formulas', (_req, res) => {
+  res.json({
+    ok: true,
+    timestamp: Date.now(),
+    formulaReports: hiveMemory.formulaReports.slice(-80).reverse(),
+    consensus: getMathConsensus(),
+    weights: getTopMathWeights(18),
+    note: 'Live mathematical reports are paper-simulation learning only. No trading, no API keys.'
+  });
+});
+
+app.get('/state', (_req, res) => {
+  res.json({
+    ok: true,
+    running,
+    serverSideAutonomous: true,
+    pageIsOnlyViewer: true,
+    scientistHiveV10: true,
+    collectiveMathLearning: true,
+    timestamp: Date.now(),
+    config,
+    arena: getArenaSnapshot(),
+    hive: getHiveSnapshot(),
+    lastScan,
+    websocket: {
+      connected: wsState.connected,
+      mode: wsState.mode,
+      discoveredSymbols: wsState.discoveredSymbols.size,
+      subscribedSymbols: wsState.subscribedSymbols.size,
+      lastMessageAt: wsState.lastMessageAt
+    }
+  });
 });
 
 app.post('/arena/reset', (_req, res) => {
@@ -475,6 +514,7 @@ function createPrediction(contestant, results, cfg, now) {
     contestantId: contestant.id,
     callsign: contestant.callsign,
     style: contestant.style.name,
+    styleKey: contestant.style.key,
     styleAr: contestant.style.ar,
     indicator: contestant.style.indicator,
     symbol: signal.symbol,
@@ -487,11 +527,16 @@ function createPrediction(contestant, results, cfg, now) {
     signalScore: signal.score,
     signalTags: signal.tags || [],
     signalSnapshot: signalFeatureSnapshot(signal),
+    formula: reading.formula || null,
     hiveContext: reading.hiveContext || null,
     paperTrade: null,
     status: 'OPEN'
   };
   prediction.paperTrade = openPaperTrade(contestant, prediction, signal, now);
+  const decisionReport = createDecisionFormulaReport(contestant, prediction, signal, reading, now);
+  prediction.scientistReportId = decisionReport.id;
+  pushScientistReport(decisionReport);
+  contestant.learning.lastFormula = decisionReport.equation;
   contestant.lastPrediction = prediction;
   assignBotTarget(contestant, signal, prediction, now);
   return prediction;
@@ -624,9 +669,15 @@ function readSignal(contestant, signal, cfg) {
   const hiveContext = getSharedHiveBoost(contestant, signal, direction);
   conviction += hiveContext.boost;
   if (hiveContext.note) basis += ` | Hive ${hiveContext.note}`;
+  const mathContext = getCollectiveMathBoost(contestant, signal, direction);
+  conviction += mathContext.boost;
+  if (mathContext.note) basis += ` | Math ${mathContext.note}`;
+  const formula = buildDecisionEquation(contestant, signal, { baseConviction: conviction, direction, hiveContext, mathContext });
   conviction = clamp(Math.round(conviction), 1, 100);
   if (conviction < contestant.minConviction) direction = 'WATCH';
-  return { conviction, direction, basis, hiveContext };
+  formula.finalConviction = conviction;
+  formula.finalDirection = direction;
+  return { conviction, direction, basis, hiveContext, mathContext, formula };
 }
 
 function resolvePrediction(prediction, exitPrice, now, signal) {
@@ -872,6 +923,22 @@ function startBotLoop() {
   }, BOT_TICK_MS);
 }
 
+function startLiveHiveLoop() {
+  if (liveHiveTimer) return;
+  liveHiveTimer = setInterval(() => {
+    // Live mark-to-market and shared brain updates are server-side.
+    // The browser is only a spectator; closing Safari does not stop this loop while the server remains awake.
+    const payload = {
+      timestamp: Date.now(),
+      running,
+      hive: getHiveSnapshot(),
+      arena: getArenaSnapshot(),
+      botSwarm: getBotSwarm()
+    };
+    broadcast('hive-live', payload);
+  }, LIVE_HIVE_PUSH_MS);
+}
+
 function updateBotSwarm(now) {
   const dt = clamp((now - lastBotTickAt) / 1000, 0.2, 2.25);
   lastBotTickAt = now;
@@ -1077,6 +1144,9 @@ function createLearningState(style) {
     lastAnalysis: null,
     winsByTag: {},
     lossesByTag: {},
+    learnedWeights: {},
+    learnedFrom: 0,
+    lastFormula: null,
     styleKey: style?.key || 'UNKNOWN'
   };
 }
@@ -1087,6 +1157,13 @@ function createHiveMemory() {
     lessons: [],
     reviews: [],
     broadcasts: [],
+    formulaReports: [],
+    scientistDebates: [],
+    mathWeights: new Map(),
+    mathStats: new Map(),
+    consensus: null,
+    totalFormulaReports: 0,
+    collectiveVersion: 0,
     patternStats: new Map(),
     symbolStats: new Map(),
     totalResolved: 0,
@@ -1099,6 +1176,13 @@ function resetHiveMemory() {
   hiveMemory.lessons = [];
   hiveMemory.reviews = [];
   hiveMemory.broadcasts = [];
+  hiveMemory.formulaReports = [];
+  hiveMemory.scientistDebates = [];
+  hiveMemory.mathWeights = new Map();
+  hiveMemory.mathStats = new Map();
+  hiveMemory.consensus = null;
+  hiveMemory.totalFormulaReports = 0;
+  hiveMemory.collectiveVersion = 0;
   hiveMemory.patternStats = new Map();
   hiveMemory.symbolStats = new Map();
   hiveMemory.totalResolved = 0;
@@ -1121,6 +1205,7 @@ function signalFeatureSnapshot(signal) {
     absorption: signal.absorption,
     tags: [...(signal.tags || [])],
     explanation: signal.explanation || null,
+    vector: featureVectorFromSignal(signal),
     timestamp: signal.timestamp || Date.now()
   };
 }
@@ -1405,6 +1490,10 @@ function recordHiveOutcome(contestant, prediction, outcome, signal) {
     hiveMemory.patternStats.set(key, st);
   }
 
+  const formulaReport = createOutcomeFormulaReport(contestant, prediction, outcome, signal);
+  pushScientistReport(formulaReport);
+  applyCollectiveMathLearning(formulaReport);
+
   if (outcome.selfReview) {
     pushLimited(hiveMemory.reviews, outcome.selfReview, 160);
     const broad = {
@@ -1417,7 +1506,260 @@ function recordHiveOutcome(contestant, prediction, outcome, signal) {
       tags
     };
     pushLimited(hiveMemory.broadcasts, broad, 80);
+    broadcast('hive-share', { broadcast: broad, hive: getHiveSnapshot(), timestamp: Date.now() });
   }
+}
+
+
+function featureVectorFromSignal(signal) {
+  const whaleUnit = Math.max(1, Number(config.whaleUsd) || defaultConfig.whaleUsd);
+  const buyPct = clamp(Number(signal.buyPct || 0), 0, 1);
+  const range = Number(signal.priceRangePct || 0);
+  const vector = {
+    SCORE: clamp(Number(signal.score || 0) / 100, 0, 1.25),
+    BUY_IMBALANCE: clamp((buyPct - 0.5) * 2, -1, 1),
+    BIG_BUY: clamp(Number(signal.bigBuyUsd || 0) / (whaleUnit * 4), 0, 2.5),
+    BIG_SELL: clamp(Number(signal.bigSellUsd || 0) / (whaleUnit * 4), 0, 2.5),
+    NET_WHALE: clamp(Number(signal.netWhale || 0) / (whaleUnit * 4), -2.5, 2.5),
+    FLOW: clamp(Number(signal.totalFlow || 0) / (whaleUnit * 8), 0, 2.5),
+    RANGE_LOCK: clamp((1.05 - range) / 1.05, -1.4, 1),
+    PRICE_LIFT: clamp(Number(signal.priceChangePct || 0) / 1.2, -2, 2),
+    ABSORPTION: signal.absorption ? 1 : 0,
+    WHALE_COUNT: clamp(Number(signal.whaleTradeCount || 0) / 5, 0, 2)
+  };
+  return vector;
+}
+
+function initialBotWeights(contestant) {
+  const base = {
+    SCORE: 0.30,
+    BUY_IMBALANCE: 0.25,
+    BIG_BUY: 0.20,
+    BIG_SELL: -0.22,
+    NET_WHALE: 0.28,
+    FLOW: 0.16,
+    RANGE_LOCK: 0.14,
+    PRICE_LIFT: 0.18,
+    ABSORPTION: 0.20,
+    WHALE_COUNT: 0.10
+  };
+  const key = contestant?.style?.key || '';
+  if (key === 'SELL_PRESSURE') { base.BIG_SELL = 0.33; base.BUY_IMBALANCE = -0.16; base.NET_WHALE = -0.25; base.PRICE_LIFT = -0.12; }
+  if (key === 'ABSORPTION') { base.ABSORPTION = 0.44; base.RANGE_LOCK = 0.34; base.FLOW = 0.20; }
+  if (key === 'BIG_BUY') { base.BIG_BUY = 0.48; base.NET_WHALE = 0.24; }
+  if (key === 'RANGE_LOCK') { base.RANGE_LOCK = 0.42; base.FLOW = 0.23; }
+  if (key === 'PRICE_LIFT' || key === 'MICRO_LIFT') { base.PRICE_LIFT = 0.42; base.BUY_IMBALANCE = 0.22; }
+  const variant = Number(contestant?.variant || 0) / 100;
+  for (const k of Object.keys(base)) base[k] = Number((base[k] + variant).toFixed(4));
+  return base;
+}
+
+function buildDecisionEquation(contestant, signal, ctx = {}) {
+  const x = featureVectorFromSignal(signal);
+  const w0 = initialBotWeights(contestant);
+  const learned = contestant.learning?.learnedWeights || {};
+  const terms = Object.keys(x).map(k => {
+    const globalW = Number(hiveMemory.mathWeights.get(k) || 0);
+    const botLearned = Number(learned[k] || 0);
+    const w = Number((w0[k] + globalW + botLearned).toFixed(4));
+    const value = Number(x[k].toFixed(4));
+    return { feature: k, w, value, product: Number((w * value).toFixed(4)) };
+  });
+  const raw = terms.reduce((sum, t) => sum + t.product, 0);
+  const pressure = Number((50 + raw * 38).toFixed(2));
+  const equation = `C = 50 + 38Σ(wᵢ·xᵢ) + H; C=${pressure.toFixed(1)} قبل الفلاتر`;
+  const latex = `C=50+38\\sum_i w_i x_i + H`;
+  const strongest = terms.slice().sort((a, b) => Math.abs(b.product) - Math.abs(a.product)).slice(0, 5);
+  return {
+    equation,
+    latex,
+    raw: Number(raw.toFixed(4)),
+    pressure,
+    terms: strongest,
+    vector: x,
+    baseStyle: contestant.style?.key,
+    hiveBoost: ctx.hiveContext?.boost || 0,
+    mathBoost: ctx.mathContext?.boost || 0,
+    finalConviction: null,
+    finalDirection: ctx.direction || 'WATCH'
+  };
+}
+
+function createDecisionFormulaReport(contestant, prediction, signal, reading, now = Date.now()) {
+  const formula = reading.formula || buildDecisionEquation(contestant, signal, reading);
+  return {
+    id: randomUUID(),
+    kind: 'DECISION_FORMULA',
+    timestamp: now,
+    phase: 'قبل النتيجة',
+    contestantId: contestant.id,
+    callsign: contestant.callsign,
+    style: contestant.style.name,
+    styleKey: contestant.style.key,
+    styleAr: contestant.style.ar,
+    symbol: prediction.symbol,
+    direction: prediction.direction,
+    conviction: prediction.conviction,
+    equation: formula.equation,
+    latex: formula.latex,
+    terms: formula.terms,
+    vector: formula.vector,
+    result: 'OPEN',
+    pnl: 0,
+    message: `${contestant.callsign} نشر معادلة قرار على ${prediction.symbol}: ${formula.equation}`,
+    teaching: `أراقب ${prediction.symbol} لأن أعلى حدود المعادلة هي: ${formula.terms.map(t => `${t.feature}=${t.product}`).join(', ') || 'لا توجد حدود قوية'}.`
+  };
+}
+
+function createOutcomeFormulaReport(contestant, prediction, outcome, signal) {
+  const snap = prediction.signalSnapshot || {};
+  const vector = snap.vector || featureVectorFromSignal({ ...snap, tags: prediction.signalTags || [] });
+  const pnl = Number(outcome.paperResult?.netPnl ?? 0);
+  const movePct = Number(outcome.movePct || 0);
+  const win = outcome.hit || pnl > 0;
+  const side = prediction.direction === 'DOWN' ? -1 : prediction.direction === 'UP' ? 1 : 0;
+  const notional = Number(outcome.paperResult?.notional || prediction.paperTrade?.notional || 0);
+  const reward = clamp((win ? 1 : -1) * (0.65 + Math.min(1.35, Math.abs(movePct) / 0.8) + Math.min(1.0, Math.abs(pnl) / 12)), -3, 3);
+  const terms = Object.entries(vector).map(([feature, value]) => ({
+    feature,
+    value: Number(Number(value).toFixed(4)),
+    gradient: Number((reward * Number(value || 0)).toFixed(4))
+  })).sort((a, b) => Math.abs(b.gradient) - Math.abs(a.gradient)).slice(0, 7);
+  const equation = `R = sign(PnL)·(|move|+|PnL|) = ${reward.toFixed(2)}; Δwᵢ = η·R·xᵢ`;
+  const latex = `\\Delta w_i=\\eta\\,R\\,x_i`;
+  return {
+    id: randomUUID(),
+    kind: win ? 'WIN_PROOF' : 'LOSS_PROOF',
+    timestamp: Date.now(),
+    phase: win ? 'برهان ربح' : 'تشريح خسارة',
+    contestantId: contestant.id,
+    callsign: contestant.callsign,
+    style: contestant.style.name,
+    styleAr: contestant.style.ar,
+    symbol: prediction.symbol,
+    direction: prediction.direction,
+    conviction: prediction.conviction,
+    equation,
+    latex,
+    terms,
+    vector,
+    reward: Number(reward.toFixed(4)),
+    result: win ? 'WIN' : 'LOSS',
+    hit: outcome.hit,
+    pnl,
+    movePct,
+    notional,
+    message: `${contestant.callsign} أرسل ${win ? 'برهان ربح' : 'تشريح خسارة'}: ${equation}`,
+    teaching: win
+      ? `الخلية سترفع وزن الحدود التي ظهرت قبل نجاح ${prediction.symbol}.`
+      : `الخلية ستخفض أو تعكس وزن الحدود التي سبقت فشل ${prediction.symbol}.`
+  };
+}
+
+function pushScientistReport(report) {
+  if (!report) return;
+  hiveMemory.totalFormulaReports += 1;
+  pushLimited(hiveMemory.formulaReports, report, HIVE_REPORT_MAX);
+  pushLimited(hiveMemory.scientistDebates, {
+    id: report.id,
+    timestamp: report.timestamp,
+    speaker: report.callsign,
+    symbol: report.symbol,
+    result: report.result,
+    equation: report.equation,
+    teaching: report.teaching
+  }, 160);
+  broadcast('math-report', { report, hive: getHiveSnapshot(), timestamp: Date.now() });
+}
+
+function applyCollectiveMathLearning(report) {
+  if (!report || !report.terms?.length || !Number.isFinite(Number(report.reward))) return;
+  const reward = Number(report.reward);
+  const lr = HIVE_LEARNING_RATE;
+  const changed = [];
+  for (const term of report.terms) {
+    const feature = term.feature;
+    const delta = clamp(lr * reward * Number(term.value || 0), -0.07, 0.07);
+    const oldWeight = Number(hiveMemory.mathWeights.get(feature) || 0);
+    const next = clamp(oldWeight + delta, -0.55, 0.55);
+    hiveMemory.mathWeights.set(feature, Number(next.toFixed(5)));
+    const st = hiveMemory.mathStats.get(feature) || { feature, updates: 0, up: 0, down: 0, netReward: 0, lastDelta: 0 };
+    st.updates += 1;
+    if (delta >= 0) st.up += 1; else st.down += 1;
+    st.netReward += reward;
+    st.lastDelta = Number(delta.toFixed(5));
+    hiveMemory.mathStats.set(feature, st);
+    changed.push({ feature, delta: Number(delta.toFixed(5)), weight: Number(next.toFixed(5)) });
+  }
+  hiveMemory.collectiveVersion += 1;
+  hiveMemory.consensus = buildConsensusFromWeights(changed, report);
+  teachAllBotsFromReport(report, changed);
+  broadcast('hive-learn', { consensus: hiveMemory.consensus, weights: getTopMathWeights(12), report, timestamp: Date.now() });
+}
+
+function teachAllBotsFromReport(report, changed) {
+  const winner = report.result === 'WIN';
+  for (const bot of contestants) {
+    bot.learning.learnedFrom += 1;
+    for (const change of changed) {
+      const affinity = bot.style?.key === report.styleKey ? 1.15 : bot.style?.direction === report.direction ? 0.7 : 0.36;
+      const old = Number(bot.learning.learnedWeights[change.feature] || 0);
+      bot.learning.learnedWeights[change.feature] = Number(clamp(old + change.delta * affinity * 0.18, -0.22, 0.22).toFixed(5));
+    }
+    if (winner) bot.learning.confidence = clamp(bot.learning.confidence + 0.05, 5, 100);
+    else bot.learning.confidence = clamp(bot.learning.confidence - 0.04, 5, 100);
+  }
+}
+
+function buildConsensusFromWeights(changed, report) {
+  const top = getTopMathWeights(6);
+  const strongest = top.map(x => `${x.feature}:${x.weight > 0 ? '+' : ''}${x.weight}`).join(' | ') || 'no weights yet';
+  return {
+    timestamp: Date.now(),
+    version: hiveMemory.collectiveVersion,
+    source: report.callsign,
+    symbol: report.symbol,
+    result: report.result,
+    equation: `Cₕive = 50 + 38Σ((w_bot+w_hive)·x)` ,
+    teaching: `آخر تحديث جماعي من ${report.callsign}. أقوى أوزان الخلية الآن: ${strongest}.`,
+    changed
+  };
+}
+
+function getTopMathWeights(limit = 12) {
+  return [...hiveMemory.mathWeights.entries()]
+    .map(([feature, weight]) => ({ feature, weight: Number(weight.toFixed(5)), strength: Math.abs(weight), stats: hiveMemory.mathStats.get(feature) || null }))
+    .sort((a, b) => b.strength - a.strength)
+    .slice(0, limit);
+}
+
+function getMathConsensus() {
+  return hiveMemory.consensus || {
+    timestamp: hiveMemory.startedAt,
+    version: hiveMemory.collectiveVersion,
+    equation: 'Cₕive = 50 + 38Σ((w_bot+w_hive)·x)',
+    teaching: 'الخلية تنتظر أول برهان ربح أو تشريح خسارة حتى تبدأ تعديل الأوزان رياضيًا.',
+    changed: []
+  };
+}
+
+function getCollectiveMathBoost(contestant, signal, direction) {
+  if (!direction || direction === 'WATCH') return { boost: 0, note: '' };
+  const vector = featureVectorFromSignal(signal);
+  let raw = 0;
+  let best = null;
+  for (const [feature, value] of Object.entries(vector)) {
+    const w = Number(hiveMemory.mathWeights.get(feature) || 0) + Number(contestant.learning?.learnedWeights?.[feature] || 0);
+    const product = w * Number(value || 0);
+    raw += product;
+    if (!best || Math.abs(product) > Math.abs(best.product)) best = { feature, product, w, value };
+  }
+  if (direction === 'DOWN') raw *= -0.85;
+  const boost = clamp(raw * 24, -16, 16);
+  return {
+    boost,
+    note: best && Math.abs(best.product) > 0.005 ? `${best.feature} ${best.product >= 0 ? '+' : ''}${best.product.toFixed(2)}` : ''
+  };
 }
 
 function getSharedHiveBoost(contestant, signal, direction) {
@@ -1508,6 +1850,12 @@ function getHiveSnapshot() {
     lessons: hiveMemory.lessons.slice(-14).reverse(),
     reviews: hiveMemory.reviews.slice(-14).reverse(),
     sharedRules,
+    formulaReports: hiveMemory.formulaReports.slice(-18).reverse(),
+    scientistDebates: hiveMemory.scientistDebates.slice(-16).reverse(),
+    mathConsensus: getMathConsensus(),
+    topWeights: getTopMathWeights(14),
+    totalFormulaReports: hiveMemory.totalFormulaReports,
+    collectiveVersion: hiveMemory.collectiveVersion,
     totalResolved: hiveMemory.totalResolved
   };
 }
@@ -1522,7 +1870,7 @@ async function initValidSymbols() {
   // REST exchangeInfo is optional only. If Binance blocks REST from a cloud IP,
   // the game still runs and validates symbols with a safe USDT suffix pattern.
   try {
-    log('api', 'V6 WebSocket mode: optional exchangeInfo validation starting. REST is not used for scans.');
+    log('api', 'V10 hive scientists mode: optional exchangeInfo validation starting. REST is not used for scans.');
     const data = await binanceJson('/fapi/v1/exchangeInfo');
     const symbols = Array.isArray(data.symbols) ? data.symbols : [];
     validSymbols = new Set(
@@ -1586,7 +1934,7 @@ async function normalizeConfig(raw) {
       const before = symbols;
       symbols = before.filter(s => /^[A-Z0-9]{2,30}USDT$/.test(s));
       rejected.push(...before.filter(s => !/^[A-Z0-9]{2,30}USDT$/.test(s)));
-      warnings.push('REST symbol validation unavailable; V8 is using safe USDT symbol format checks and Binance WebSocket streams.');
+      warnings.push('REST symbol validation unavailable; V10 is using safe USDT symbol format checks and Binance WebSocket streams.');
     }
 
     if (symbols.length === 0) {
@@ -1689,7 +2037,7 @@ function ensureAllBinanceTradeStreams() {
 function openBinanceSocket(url, labelSymbols, mode) {
   const ws = new WebSocket(url, {
     handshakeTimeout: REQUEST_TIMEOUT_MS,
-    headers: { 'User-Agent': 'WhaleHunterRadar/7.0 websocket-all-symbols-monitoring-only' }
+    headers: { 'User-Agent': 'WhaleHunterRadar/10.0 hive-scientists-paper-monitoring-only' }
   });
   wsState.ws = ws;
   wsState.connected = false;
@@ -1937,7 +2285,13 @@ function formatDuration(seconds) {
 
 app.listen(PORT, () => {
   startBotLoop();
-  log('server', `Whale Hunter Radar Hive Mind V8 online on port ${PORT}. ALL BINANCE WebSocket mode. 500 bots with $1000 fake money each. Monitoring only. No API keys. No trading.`);
+  startLiveHiveLoop();
   ensureTradeStreams(config.symbols);
   initValidSymbols();
+  if (AUTOSTART) {
+    running = true;
+    scheduleNextScan(9000);
+  }
+  log('server', `Whale Hunter Radar Hive Scientists V10 online on port ${PORT}. Server-side autonomous paper hive: 500 bots, $1000 fake each, ALL Binance WebSocket mode. Page is viewer only. Monitoring only. No API keys. No real trading.`);
+  broadcast('status', { running, scanning, autostart: AUTOSTART, timestamp: Date.now() });
 });
