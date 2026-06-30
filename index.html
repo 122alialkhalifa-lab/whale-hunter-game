@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="WhaleHunter" />
-  <title>Whale Hunter Radar — Hive Scientists V10</title>
+  <title>Whale Hunter Radar — Living Hive Scientists V11</title>
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   <style>
@@ -1193,6 +1193,9 @@
     .hive-score { direction:ltr; font-weight:1000; color:var(--green); text-align:left; }
     .formula-line { direction:ltr; display:block; margin-top:6px; color:#e5fbff; font-weight:1000; font-size:12px; letter-spacing:.01em; }
     .formula-terms { direction:ltr; display:block; margin-top:4px; color:var(--yellow); font-size:11px; font-weight:900; }
+    .live-pulse { display:inline-flex; align-items:center; gap:7px; border:1px solid rgba(24,255,155,.35); background:rgba(24,255,155,.08); color:var(--green); border-radius:999px; padding:6px 10px; font-size:12px; font-weight:1000; direction:ltr; margin-top:7px; }
+    .live-pulse::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 14px var(--green); animation:pulseDot 1s infinite; }
+    @keyframes pulseDot { 0%,100%{ transform:scale(.75); opacity:.55 } 50%{ transform:scale(1.25); opacity:1 } }
     .hive-empty { border:1px dashed rgba(0,229,255,.22); border-radius:18px; padding:18px; color:var(--muted); text-align:center; line-height:1.7; }
     .money-up { color:var(--green) !important; }
     .money-down { color:var(--red) !important; }
@@ -1210,7 +1213,7 @@
     <section class="top-grid">
       <div class="hud-panel">
         <div>
-          <div class="eyebrow">ALL BINANCE FUTURES • PUBLIC DATA • NO API KEYS • NO TRADING</div>
+          <div class="eyebrow">10-MIN FAKE LEVERAGE SPRINT • ALL BINANCE FUTURES • NO TRADING</div>
           <h1>لعبة صيد الحيتان</h1>
           <p class="subtitle">تحوّل تدفق كل عملات Binance Futures USDT إلى لعبة رادار فيها 500 روبوت صيّاد يتحركون تلقائيًا، كل واحد يقرأ مؤشره ويتجه نحو الإشارة التي يثق فيها — مراقبة فقط بدون تنفيذ صفقات.</p>
           <div class="safety">مراقبة فقط. ليست توصية مالية. الرافعة قد تصفّر الحساب.</div>
@@ -1218,7 +1221,7 @@
         <div class="game-meta">
           <div class="mini-box"><span>Captain</span><strong>Bot Commander</strong></div>
           <div class="mini-box"><span>Mode</span><strong>Auto Bots</strong></div>
-          <div class="mini-box"><span>Rule</span><strong>No Entry Calls</strong></div>
+          <div class="mini-box"><span>Rule</span><strong>Fake Leverage Only</strong></div>
         </div>
       </div>
 
@@ -1284,12 +1287,16 @@
       <article class="mission" id="missionAbsorb"><span>Mission 03</span><strong>Absorption Hunter</strong><p>التقط إشارة ABSORPTION. Progress: <b id="mAbsorb">0/1</b></p></article>
     </section>
 
+    <section class="hive-board" style="margin:14px 0; min-height:auto" aria-label="Living Scientist Feed">
+      <h3>🧠 Live Scientist Pulse / عقل حي</h3>
+      <div id="livingPulse" class="hive-empty">ينتظر أول مراكز وهمية. بعد تشغيل الرادار سترى كل 1.5 ثانية روبوتات تعرض معادلاتها وتعدّل أوزانها لحظيًا.</div>
+    </section>
 
     <section class="arena-shell" aria-label="Prediction Arena">
       <div class="arena-head">
         <div>
           <h2>🏁 بطولة 500 صيّاد — Prediction Arena</h2>
-          <p>كل متسابق هنا روبوت آلي. يتحرك على الرادار بدون لاعبين بشر: يطارد، يدور، يتراجع من ضغط البيع، أو يهجم على Boss Whale حسب مؤشره وقراءته. بعد مدة التوقع يتم حساب من قرأ السوق صح كنقاط لعبة فقط.</p>
+          <p>كل متسابق هنا روبوت آلي هدفه أعلى ربح وهمي خلال 10 دقائق. يختار الاتجاه والرافعة الوهمية حسب معادلته، ويتعلم من الربح السريع أو التصفية الوهمية كنقاط لعبة فقط.</p>
         </div>
         <div class="arena-chip" id="arenaChip">500 RACERS · 1H WATCH</div>
       </div>
@@ -1297,7 +1304,7 @@
         <div class="arena-stat"><span>Contestants</span><strong id="arenaContestants">500</strong></div>
         <div class="arena-stat"><span>Open Predictions</span><strong id="arenaOpen">0</strong></div>
         <div class="arena-stat"><span>Resolved</span><strong id="arenaResolved">0</strong></div>
-        <div class="arena-stat"><span>Horizon</span><strong id="arenaHorizon">1h</strong></div>
+        <div class="arena-stat"><span>10m Sprint</span><strong id="arenaHorizon">10m</strong></div>
         <div class="arena-stat"><span>Bot Movement</span><strong id="arenaBotMode">AUTO</strong></div>
       </div>
       <div class="arena-grid">
@@ -1320,10 +1327,10 @@
     <section class="hive-shell" aria-label="Hive Mind Paper Money Intelligence">
       <div class="hive-head">
         <div>
-          <h2>🐝 خلية علماء الرياضيات — Hive Scientists V10</h2>
-          <p>كل روبوت يبدأ بـ <b>$1000 وهمية</b>. يتصرف كعالم رياضيات: يفتح مركزًا وهميًا، يرسل معادلته لحظيًا، ثم عند الربح أو الخسارة يرسل برهانًا رياضيًا والـ 499 روبوت يتعلمون منه فورًا. لا أوامر Binance ولا أموال حقيقية.</p>
+          <h2>🐝 خلية علماء الرياضيات — Living Hive Scientists V11</h2>
+          <p>كل روبوت يبدأ بـ <b>$1000 وهمية</b>. الهدف: أكبر ربح وهمي في أقل وقت داخل 10 دقائق، حتى باستخدام رافعة وهمية. يرسل معادلة السرعة والرافعة وPnL/min للخلية، والآخرون يتعلمون فورًا. لا أوامر Binance ولا أموال حقيقية.</p>
         </div>
-        <div class="hive-chip" id="hiveChip">500 × $1000 FAKE</div>
+        <div class="hive-chip" id="hiveChip">500 × $1000 FAKE • 10m • LEV</div>
       </div>
       <div class="hive-stats">
         <div class="hive-stat"><span>Total Fake Equity</span><strong id="hiveEquity">$500,000</strong></div>
@@ -1331,6 +1338,7 @@
         <div class="hive-stat"><span>Open Fake Positions</span><strong id="hiveOpenPositions">0</strong></div>
         <div class="hive-stat"><span>Learned Lessons</span><strong id="hiveLessonsCount">0</strong></div>
         <div class="hive-stat"><span>Formula Reports</span><strong id="hiveFormulaCount">0</strong></div>
+        <div class="hive-stat"><span>Live Thought Pulses</span><strong id="hiveThoughtCount">0</strong></div>
       </div>
       <div class="hive-grid">
         <div class="hive-board">
@@ -1351,7 +1359,7 @@
         </div>
         <div class="hive-board">
           <h3>Live Math Reports / تقارير العلماء لحظيًا</h3>
-          <div id="hiveFormulas" class="hive-empty">كل Bot سيرسل معادلة C = 50 + 38Σ(wᵢ·xᵢ) قبل القرار، ثم Δwᵢ = η·R·xᵢ بعد الربح أو الخسارة.</div>
+          <div id="hiveFormulas" class="hive-empty">كل Bot يرسل: C قبل القرار، ثم V = PnL%/min + Lev كل 1.5 ثانية، ثم Δw بعد الربح أو التصفية الوهمية.</div>
         </div>
         <div class="hive-board">
           <h3>Collective Equation / معادلة الخلية</h3>
@@ -1386,7 +1394,7 @@
             <input id="intervalSecInput" type="number" min="3" max="300" step="1" inputmode="numeric" />
           </label>
           <label>
-            <span>Arena Horizon Seconds <small>مدة التوقع، الافتراضي ساعة</small></span>
+            <span>Arena Horizon Seconds <small>مدة السباق، الافتراضي 10 دقائق</small></span>
             <input id="arenaHorizonInput" type="number" min="60" max="14400" step="60" inputmode="numeric" />
           </label>
         </div>
@@ -1406,7 +1414,7 @@
       <div class="logs" id="logs"></div>
     </section>
 
-    <p class="footer-note">This PWA uses public Binance Futures market data through your Node server only. The 500 robot contestants move and score inside the game only. It does not place orders, request keys, store private keys, or promise profit. Signals mean possible whale footprint / watch signal only.</p>
+    <p class="footer-note">This PWA uses public Binance Futures market data through your Node server only. The 500 robot contestants run fake 10-minute leveraged paper sprints inside the game only. It does not place orders, request keys, store private keys, or promise profit. Signals mean possible whale footprint / watch signal only.</p>
   </main>
 
   <script>
@@ -1415,8 +1423,9 @@
       whaleUsd: 30000,
       minScore: 70,
       windowSec: 60,
-      intervalSec: 8,
-      arenaHorizonSec: 3600
+      intervalSec: 5,
+      arenaHorizonSec: 600,
+      maxFakeLeverage: 20
     };
 
     const els = {
@@ -1466,6 +1475,8 @@
       hiveOpenPositions: document.getElementById('hiveOpenPositions'),
       hiveLessonsCount: document.getElementById('hiveLessonsCount'),
       hiveFormulaCount: document.getElementById('hiveFormulaCount'),
+      hiveThoughtCount: document.getElementById('hiveThoughtCount'),
+      livingPulse: document.getElementById('livingPulse'),
       hiveRules: document.getElementById('hiveRules'),
       hiveReviews: document.getElementById('hiveReviews'),
       hiveCoins: document.getElementById('hiveCoins'),
@@ -1593,6 +1604,7 @@
       eventSource.addEventListener('hive-live', evt => { const data = parseEvent(evt); if (data?.hive) renderHive(data.hive); if (data?.arena) renderArena(data.arena); });
       eventSource.addEventListener('hive-share', evt => { const data = parseEvent(evt); if (data?.hive) renderHive(data.hive); if (data?.broadcast) addLog({ type: 'hive', message: data.broadcast.message || 'Hive shared a live rule', timestamp: data.timestamp || Date.now() }); });
       eventSource.addEventListener('math-report', evt => { const data = parseEvent(evt); if (data?.hive) renderHive(data.hive); if (data?.report) addLog({ type: 'math', message: data.report.message || 'Scientist bot published an equation', timestamp: data.timestamp || Date.now() }); });
+      eventSource.addEventListener('scientist-think', evt => { const data = parseEvent(evt); if (data?.hive) renderHive(data.hive); if (data?.reports?.length) renderLivingPulse(data.reports); });
       eventSource.addEventListener('hive-learn', evt => { const data = parseEvent(evt); if (data?.consensus) addLog({ type: 'hive', message: data.consensus.teaching || 'Hive updated collective equation', timestamp: data.timestamp || Date.now() }); });
       eventSource.addEventListener('bot-tick', evt => renderBotSwarm(parseEvent(evt)));
       eventSource.addEventListener('log', evt => addLog(parseEvent(evt)));
@@ -1641,7 +1653,8 @@
         minScore: Number(els.minScoreInput.value),
         windowSec: Number(els.windowSecInput.value),
         intervalSec: Number(els.intervalSecInput.value),
-        arenaHorizonSec: Number(els.arenaHorizonInput.value)
+        arenaHorizonSec: Number(els.arenaHorizonInput.value),
+        maxFakeLeverage: 20
       };
       const result = await post('/config', payload);
       if (result?.config) {
@@ -1850,7 +1863,7 @@
       const total = arena?.totalContestants ?? 500;
       const open = arena?.openCount ?? 0;
       const resolved = arena?.resolvedCount ?? 0;
-      const horizon = arena?.horizonSec ?? config.arenaHorizonSec ?? 3600;
+      const horizon = arena?.horizonSec ?? config.arenaHorizonSec ?? 600;
       els.arenaContestants.textContent = String(total);
       els.arenaOpen.textContent = String(open);
       els.arenaResolved.textContent = String(resolved);
@@ -1870,7 +1883,7 @@
             <div class="rank-num">${index + 1}</div>
             <div>
               <div class="agent-name">${escapeHtml(racer.callsign)}</div>
-              <div class="agent-sub">${escapeHtml(racer.styleAr)} · ${escapeHtml(racer.indicator)} · ${racer.wins}/${racer.games || 0} hits · fake ${fmtUsd(racer.fakeEquity || 1000)} · ${escapeHtml(racer.learningMood || 'OBSERVING')}</div>
+              <div class="agent-sub">${escapeHtml(racer.styleAr)} · ${escapeHtml(racer.indicator)} · ${racer.wins}/${racer.games || 0} hits · fake ${fmtUsd(racer.fakeEquity || 1000)} · lev ${racer.leverage || 1}x · V ${Number(racer.sprintVelocity || 0).toFixed(1)} · ${escapeHtml(racer.learningMood || 'OBSERVING')}</div>
             </div>
             <div class="agent-score">${racer.xp}<small>${Math.round((racer.accuracy || 0) * 100)}% ACC</small></div>
           </div>`).join('');
@@ -1920,6 +1933,8 @@
       if (els.hiveOpenPositions) els.hiveOpenPositions.textContent = String(bank.openPositions || 0);
       if (els.hiveLessonsCount) els.hiveLessonsCount.textContent = String((hive?.lessons || []).length);
       if (els.hiveFormulaCount) els.hiveFormulaCount.textContent = String(hive?.totalFormulaReports || (hive?.formulaReports || []).length || 0);
+      if (els.hiveThoughtCount) els.hiveThoughtCount.textContent = String(hive?.totalLiveThoughts || (hive?.liveThoughts || []).length || 0);
+      if (els.livingPulse && (hive?.liveThoughts || []).length) renderLivingPulse((hive.liveThoughts || []).slice(0, 5));
 
       const rules = hive?.sharedRules || [];
       els.hiveRules.innerHTML = rules.length ? rules.slice(0, 6).map(rule => `
@@ -1967,6 +1982,22 @@
             <div class="hive-score">Σw</div>
           </div>` : `<div class="hive-empty">الخلية تنتظر أول برهان حتى تبدأ تعديل الأوزان جماعيًا.</div>`;
       }
+    }
+
+
+    function renderLivingPulse(reports) {
+      if (!els.livingPulse) return;
+      const rows = (reports || []).slice(0, 5).map(r => `
+        <div class="hive-row">
+          <div>
+            <b>${escapeHtml(r.callsign || 'Bot')} → ${escapeHtml(r.symbol || '')} <span class="live-pulse">${escapeHtml(r.result || 'LIVE')}</span></b>
+            <small>${escapeHtml(r.teaching || r.phase || '')}</small>
+            <span class="formula-line">${escapeHtml(r.equation || '')}</span>
+            <span class="formula-terms">${(r.terms || []).slice(0,4).map(t => `${escapeHtml(t.feature)}:${Number(t.gradient ?? t.product ?? t.value ?? 0).toFixed(3)}`).join(' · ')}</span>
+          </div>
+          <div class="hive-score ${Number(r.liveReward || 0) >= 0 ? 'money-up' : 'money-down'}">L ${Number(r.liveReward || 0).toFixed(2)}</div>
+        </div>`).join('');
+      els.livingPulse.innerHTML = rows || `<div class="hive-empty">ينتظر أول نبض حي.</div>`;
     }
 
     function directionClass(value) {

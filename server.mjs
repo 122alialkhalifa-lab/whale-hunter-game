@@ -30,7 +30,14 @@ const AUTOSTART = String(process.env.AUTOSTART || 'true').toLowerCase() !== 'fal
 const LIVE_HIVE_PUSH_MS = Number(process.env.LIVE_HIVE_PUSH_MS || 3000);
 const HIVE_LEARNING_RATE = Number(process.env.HIVE_LEARNING_RATE || 0.035);
 const HIVE_REPORT_MAX = Number(process.env.HIVE_REPORT_MAX || 220);
+const SCIENTIST_THINK_MS = Number(process.env.SCIENTIST_THINK_MS || 1500);
+const LIVE_THINK_SAMPLE = Number(process.env.LIVE_THINK_SAMPLE || 18);
+const MICRO_LEARN_RATE = Number(process.env.MICRO_LEARN_RATE || 0.018);
+const MAX_FAKE_LEVERAGE = Number(process.env.MAX_FAKE_LEVERAGE || 20);
+const MIN_FAKE_LEVERAGE = Number(process.env.MIN_FAKE_LEVERAGE || 1);
+const LIQUIDATION_MARGIN_RATIO = Number(process.env.LIQUIDATION_MARGIN_RATIO || 0.88);
 let liveHiveTimer = null;
+let scientistThinkTimer = null;
 
 const defaultConfig = Object.freeze({
   // ALL_BINANCE_USDT = automatic all Binance USDⓈ-M Futures USDT symbols via WebSocket discovery.
@@ -39,7 +46,8 @@ const defaultConfig = Object.freeze({
   minScore: 70,
   windowSec: 60,
   intervalSec: 5,
-  arenaHorizonSec: 300
+  arenaHorizonSec: 600,
+  maxFakeLeverage: MAX_FAKE_LEVERAGE
 });
 
 const strategyDeck = Object.freeze([
@@ -173,7 +181,10 @@ app.get('/state', (_req, res) => {
     running,
     serverSideAutonomous: true,
     pageIsOnlyViewer: true,
-    scientistHiveV10: true,
+    scientistHiveV11: true,
+    livingScientistLoop: true,
+    tenMinuteLeverageSprint: true,
+    fakeLeverageOnly: true,
     collectiveMathLearning: true,
     timestamp: Date.now(),
     config,
@@ -753,6 +764,9 @@ function getArenaSnapshot(extra = {}) {
       lastMovePct: contestant.lastMovePct,
       fakeCash: Number(contestant.cash.toFixed(2)),
       fakeEquity: Number(computeEquity(contestant).toFixed(2)),
+      leverage: contestant.position?.leverage || 1,
+      sprintVelocity: contestant.sprint?.velocityScore || 0,
+      liquidations: contestant.sprint?.liquidations || 0,
       fakePnl: Number((computeEquity(contestant) - INITIAL_FAKE_USD).toFixed(2)),
       openPosition: contestant.position ? { symbol: contestant.position.symbol, side: contestant.position.side, entryPrice: contestant.position.entryPrice, notional: contestant.position.notional } : null,
       learningMood: contestant.learning?.mood || 'OBSERVING',
@@ -845,6 +859,7 @@ function resetArena() {
     contestant.lastResolvedAt = null;
     contestant.cash = INITIAL_FAKE_USD;
     contestant.realizedPnl = 0;
+    contestant.sprint = { targetMinutes: 10, maxLeverage: MAX_FAKE_LEVERAGE, objective: 'MAX_PROFIT_FASTEST', velocityScore: 0, liquidations: 0 };
     contestant.position = null;
     contestant.trades = 0;
     contestant.learning = createLearningState(contestant.style);
@@ -882,6 +897,7 @@ function createContestants(count) {
       lastResolvedAt: null,
       cash: INITIAL_FAKE_USD,
       realizedPnl: 0,
+      sprint: { targetMinutes: 10, maxLeverage: MAX_FAKE_LEVERAGE, objective: 'MAX_PROFIT_FASTEST', velocityScore: 0, liquidations: 0 },
       position: null,
       trades: 0,
       learning: createLearningState(style),
@@ -937,6 +953,155 @@ function startLiveHiveLoop() {
     };
     broadcast('hive-live', payload);
   }, LIVE_HIVE_PUSH_MS);
+}
+
+
+function startScientistThinkLoop() {
+  if (scientistThinkTimer) return;
+  scientistThinkTimer = setInterval(() => {
+    try {
+      const payload = generateLiveScientistThoughts(Date.now());
+      if (payload && sseClients.size > 0) {
+        broadcast('scientist-think', payload);
+      }
+    } catch (error) {
+      log('scientist-error', `Live scientist loop error: ${error.message || error}`);
+    }
+  }, SCIENTIST_THINK_MS);
+}
+
+function generateLiveScientistThoughts(now) {
+  if (!activePredictions.length) return null;
+  const open = activePredictions
+    .filter(pred => currentPrices.get(pred.symbol)?.price > 0)
+    .sort((a, b) => (a.resolveAt - now) - (b.resolveAt - now));
+  if (!open.length) return null;
+
+  const reports = [];
+  const stride = Math.max(1, Math.floor(open.length / LIVE_THINK_SAMPLE));
+  const offset = Math.floor((now / SCIENTIST_THINK_MS) % stride);
+  for (let i = offset; i < open.length && reports.length < LIVE_THINK_SAMPLE; i += stride) {
+    const pred = open[i];
+    const bot = contestants[pred.contestantId - 1];
+    if (!bot) continue;
+    const report = createLiveThoughtReport(bot, pred, now);
+    if (!report) continue;
+    reports.push(report);
+    pushLiveThought(report);
+    applyMicroLearning(report);
+  }
+
+  if (!reports.length) return null;
+  const strongest = reports.slice().sort((a, b) => Math.abs(b.liveReward) - Math.abs(a.liveReward))[0];
+  hiveMemory.consensus = {
+    timestamp: now,
+    version: hiveMemory.collectiveVersion,
+    source: strongest.callsign,
+    symbol: strongest.symbol,
+    result: strongest.liveReward >= 0 ? 'LIVE_CONFIRMING' : 'LIVE_WARNING',
+    equation: 'C_live = C₀ + Σ(w·x) + markToMarket(PnL)',
+    teaching: `نبض حي من ${strongest.callsign}: ${strongest.symbol} ${strongest.liveReward >= 0 ? 'يؤكد الفرضية' : 'يحذر من الفرضية'}، والخلية تعدل الأوزان قبل نهاية الجولة.`
+  };
+  return { timestamp: now, reports, hive: getHiveSnapshot(), arena: getArenaSnapshot(), consensus: hiveMemory.consensus };
+}
+
+function createLiveThoughtReport(contestant, prediction, now) {
+  const price = currentPrices.get(prediction.symbol)?.price;
+  if (!price || !prediction.entryPrice) return null;
+  const side = prediction.direction === 'DOWN' ? -1 : prediction.direction === 'UP' ? 1 : 0;
+  const movePct = ((price - prediction.entryPrice) / prediction.entryPrice) * 100;
+  const signedMove = side * movePct;
+  const pos = contestant.position;
+  const grossPnl = pos && pos.symbol === prediction.symbol
+    ? (price - pos.entryPrice) * pos.qty * (pos.side === 'LONG' ? 1 : -1)
+    : 0;
+  const vector = prediction.signalSnapshot?.vector || featureVectorFromSignal(prediction.signalSnapshot || {});
+  const liveReward = clamp(signedMove * 2 + grossPnl / 8, -2.5, 2.5);
+  const terms = Object.entries(vector).map(([feature, value]) => ({
+    feature,
+    value: Number(Number(value || 0).toFixed(4)),
+    gradient: Number((liveReward * Number(value || 0)).toFixed(4))
+  })).sort((a, b) => Math.abs(b.gradient) - Math.abs(a.gradient)).slice(0, 5);
+  const mood = liveReward > 0.18 ? 'CONFIRMING' : liveReward < -0.18 ? 'QUESTIONING' : 'OBSERVING';
+  contestant.learning.mood = mood;
+  contestant.learning.lastAnalysis = liveReward >= 0
+    ? `الفكرة تعمل مؤقتًا على ${prediction.symbol}: الحركة الحالية ${signedMove.toFixed(3)}% مع PnL وهمي ${grossPnl.toFixed(2)}.`
+    : `الفكرة تحت الاختبار على ${prediction.symbol}: الحركة ضد الفرضية ${signedMove.toFixed(3)}%، سأخفض الثقة إن استمر العكس.`;
+  return {
+    id: randomUUID(),
+    kind: 'LIVE_THOUGHT',
+    timestamp: now,
+    phase: 'نبض تفكير حي',
+    contestantId: contestant.id,
+    callsign: contestant.callsign,
+    style: contestant.style.name,
+    styleAr: contestant.style.ar,
+    symbol: prediction.symbol,
+    direction: prediction.direction,
+    conviction: prediction.conviction,
+    equation: `V = PnL%/min + Lev(${pos?.leverage || 1}x) + sign(dir)·Δprice = ${liveReward.toFixed(3)}; Δwᵢ = μ·V·xᵢ`,
+    latex: `V=\frac{PnL\%}{min}+Lev+sign(dir)\Delta price`,
+    terms,
+    vector,
+    liveReward: Number(liveReward.toFixed(4)),
+    result: liveReward >= 0 ? 'LIVE_OK' : 'LIVE_BAD',
+    pnl: Number(grossPnl.toFixed(4)),
+    leverage: pos?.leverage || 1,
+    liquidationPrice: pos?.liquidationPrice || null,
+    movePct: Number(movePct.toFixed(4)),
+    signedMove: Number(signedMove.toFixed(4)),
+    msLeft: Math.max(0, prediction.resolveAt - now),
+    message: `${contestant.callsign} يحسب سباق 10 دقائق على ${prediction.symbol}: V=${liveReward.toFixed(3)} ورافعة ${pos?.leverage || 1}x قبل الإغلاق`,
+    teaching: liveReward >= 0
+      ? `الخلية ترفع قليلًا وزن الحدود التي تؤكد الفرضية قبل انتهاء الصفقة الوهمية.`
+      : `الخلية تخفض قليلًا وزن الحدود التي بدأت تخدع الروبوت قبل انتهاء الصفقة الوهمية.`
+  };
+}
+
+function pushLiveThought(report) {
+  hiveMemory.totalLiveThoughts += 1;
+  pushLimited(hiveMemory.liveThoughts, report, 220);
+  pushLimited(hiveMemory.formulaReports, report, HIVE_REPORT_MAX);
+  pushLimited(hiveMemory.scientistDebates, {
+    id: report.id,
+    timestamp: report.timestamp,
+    speaker: report.callsign,
+    symbol: report.symbol,
+    result: report.result,
+    equation: report.equation,
+    teaching: report.teaching
+  }, 220);
+  hiveMemory.totalFormulaReports += 1;
+}
+
+function applyMicroLearning(report) {
+  if (!report?.terms?.length || !Number.isFinite(Number(report.liveReward))) return;
+  const changed = [];
+  const reward = Number(report.liveReward);
+  for (const term of report.terms) {
+    const delta = clamp(MICRO_LEARN_RATE * reward * Number(term.value || 0), -0.012, 0.012);
+    if (Math.abs(delta) < 0.0001) continue;
+    const oldWeight = Number(hiveMemory.mathWeights.get(term.feature) || 0);
+    const next = clamp(oldWeight + delta, -0.55, 0.55);
+    hiveMemory.mathWeights.set(term.feature, Number(next.toFixed(5)));
+    const st = hiveMemory.mathStats.get(term.feature) || { feature: term.feature, updates: 0, up: 0, down: 0, netReward: 0, lastDelta: 0 };
+    st.updates += 1;
+    if (delta >= 0) st.up += 1; else st.down += 1;
+    st.netReward += reward;
+    st.lastDelta = Number(delta.toFixed(5));
+    hiveMemory.mathStats.set(term.feature, st);
+    changed.push({ feature: term.feature, delta: Number(delta.toFixed(5)), weight: Number(next.toFixed(5)) });
+  }
+  if (changed.length) {
+    hiveMemory.collectiveVersion += 1;
+    for (const bot of contestants) {
+      bot.learning.learnedFrom += 1;
+      for (const change of changed) {
+        const old = Number(bot.learning.learnedWeights[change.feature] || 0);
+        bot.learning.learnedWeights[change.feature] = Number(clamp(old + change.delta * 0.08, -0.22, 0.22).toFixed(5));
+      }
+    }
+  }
 }
 
 function updateBotSwarm(now) {
@@ -1159,10 +1324,12 @@ function createHiveMemory() {
     broadcasts: [],
     formulaReports: [],
     scientistDebates: [],
+    liveThoughts: [],
     mathWeights: new Map(),
     mathStats: new Map(),
     consensus: null,
     totalFormulaReports: 0,
+    totalLiveThoughts: 0,
     collectiveVersion: 0,
     patternStats: new Map(),
     symbolStats: new Map(),
@@ -1178,10 +1345,12 @@ function resetHiveMemory() {
   hiveMemory.broadcasts = [];
   hiveMemory.formulaReports = [];
   hiveMemory.scientistDebates = [];
+  hiveMemory.liveThoughts = [];
   hiveMemory.mathWeights = new Map();
   hiveMemory.mathStats = new Map();
   hiveMemory.consensus = null;
   hiveMemory.totalFormulaReports = 0;
+  hiveMemory.totalLiveThoughts = 0;
   hiveMemory.collectiveVersion = 0;
   hiveMemory.patternStats = new Map();
   hiveMemory.symbolStats = new Map();
@@ -1336,43 +1505,83 @@ function updateSymbolBrain(symbol, direction, before, movePct) {
   hiveMemory.symbolStats.set(symbol, brain);
 }
 
+function chooseFakeLeverage(contestant, prediction, signal) {
+  if (!['UP', 'DOWN'].includes(prediction.direction)) return 1;
+  const maxLev = Math.max(1, Number(config.maxFakeLeverage || MAX_FAKE_LEVERAGE));
+  const conviction = Number(prediction.conviction || 0);
+  const score = Number(signal?.score || prediction.signalScore || 0);
+  const range = Number(signal?.priceRangePct || 0);
+  const buyPct = Number(signal?.buyPct || 0) * 100;
+  const riskBias = Number(contestant.risk || 0);
+  let lev = 1;
+  lev += Math.max(0, conviction - 52) / 48 * maxLev * 0.42;
+  lev += Math.max(0, score - 65) / 35 * maxLev * 0.22;
+  lev += Math.max(0, riskBias) / 8 * maxLev * 0.10;
+  if ((signal?.tags || []).includes('BOSS WHALE') || score >= 90) lev += maxLev * 0.18;
+  if (range > 1.5) lev -= maxLev * 0.18;
+  if ((signal?.tags || []).includes('SELL PRESSURE') && prediction.direction === 'UP') lev -= maxLev * 0.25;
+  if (prediction.direction === 'DOWN') lev *= 0.85;
+  return Number(clamp(lev, MIN_FAKE_LEVERAGE, maxLev).toFixed(1));
+}
+
+function fakeLiquidationPrice(entry, side, leverage) {
+  if (!entry || !leverage) return null;
+  const move = LIQUIDATION_MARGIN_RATIO / leverage;
+  return side === 'LONG'
+    ? Number((entry * Math.max(0.0001, 1 - move)).toFixed(8))
+    : Number((entry * (1 + move)).toFixed(8));
+}
+
 function openPaperTrade(contestant, prediction, signal, now) {
   if (!signal?.price || contestant.position) return null;
   if (!['UP', 'DOWN'].includes(prediction.direction)) return { action: 'WATCH_ONLY', reason: 'لا توجد صفقة وهمية لأن القرار مراقبة فقط' };
   const equity = computeEquity(contestant);
-  const baseRisk = 0.12 + Math.max(0, prediction.conviction - 55) / 200 + Math.max(0, contestant.risk) / 250;
-  const riskPct = clamp(baseRisk, 0.06, MAX_PAPER_RISK);
-  const notional = Math.max(20, Math.min(equity * riskPct, contestant.cash * 0.92));
-  if (notional < 10) return { action: 'SKIP', reason: 'رصيد وهمي غير كافٍ' };
+  const leverage = chooseFakeLeverage(contestant, prediction, signal);
+  const baseRisk = 0.06 + Math.max(0, prediction.conviction - 55) / 320 + Math.max(0, contestant.risk) / 420;
+  const marginPct = clamp(baseRisk, 0.025, Math.min(0.18, MAX_PAPER_RISK));
+  let margin = Math.max(10, equity * marginPct);
+  margin = Math.min(margin, contestant.cash * 0.88);
+  if (margin < 8) return { action: 'SKIP', reason: 'رصيد وهمي غير كافٍ للهامش' };
+  const notional = margin * leverage;
   const fee = notional * PAPER_FEE_BPS / 10000;
+  if (contestant.cash < margin + fee) margin = Math.max(0, contestant.cash - fee);
   const qty = notional / signal.price;
   const side = prediction.direction === 'UP' ? 'LONG' : 'SHORT';
+  const liquidationPrice = fakeLiquidationPrice(signal.price, side, leverage);
   const position = {
     id: randomUUID(),
     symbol: signal.symbol,
     side,
     qty,
     notional,
+    margin,
+    leverage,
+    liquidationPrice,
     entryPrice: signal.price,
     openedAt: now,
     entryFee: fee,
     strategy: contestant.style.key,
     tags: [...(prediction.signalTags || [])],
-    basis: prediction.basis
+    basis: prediction.basis,
+    sprintObjective: 'أعلى ربح وهمي خلال 10 دقائق بأسرع وقت مع تحمل خطر التصفية الوهمية'
   };
-  contestant.cash = Math.max(0, contestant.cash - notional - fee);
+  contestant.cash = Math.max(0, contestant.cash - margin - fee);
   contestant.position = position;
   contestant.trades += 1;
   hiveMemory.totalPaperTrades += 1;
   return {
-    action: 'OPEN_FAKE',
+    action: 'OPEN_FAKE_LEVERAGED',
     positionId: position.id,
     side,
     symbol: signal.symbol,
+    margin: Number(margin.toFixed(2)),
     notional: Number(notional.toFixed(2)),
+    leverage,
     entryPrice: signal.price,
+    liquidationPrice,
     fee: Number(fee.toFixed(4)),
-    text: `${contestant.callsign} فتح ${side} وهمي على ${signal.symbol} بقيمة ${formatUsd(notional)}`
+    objective: '10m max-profit sprint',
+    text: `${contestant.callsign} فتح ${side} وهمي ${leverage}x على ${signal.symbol}: هامش ${formatUsd(margin)} / حجم ${formatUsd(notional)}`
   };
 }
 
@@ -1383,21 +1592,41 @@ function closePaperTrade(contestant, prediction, exitPrice, now) {
   const grossPnl = (exitPrice - pos.entryPrice) * pos.qty * sideMult;
   const closeNotional = pos.qty * exitPrice;
   const exitFee = closeNotional * PAPER_FEE_BPS / 10000;
-  const netPnl = grossPnl - pos.entryFee - exitFee;
-  contestant.cash += pos.notional + grossPnl - exitFee;
+  const liquidated = grossPnl <= -Number(pos.margin || pos.notional) * LIQUIDATION_MARGIN_RATIO;
+  let netPnl;
+  let cashBack;
+  if (liquidated) {
+    netPnl = -Number(pos.margin || 0) - Number(pos.entryFee || 0);
+    cashBack = 0;
+    contestant.sprint.liquidations += 1;
+  } else {
+    netPnl = grossPnl - pos.entryFee - exitFee;
+    cashBack = Number(pos.margin || pos.notional || 0) + grossPnl - exitFee;
+  }
+  contestant.cash += Math.max(0, cashBack);
   contestant.realizedPnl += netPnl;
+  const heldMs = now - pos.openedAt;
+  const minutes = Math.max(0.05, heldMs / 60000);
+  const pnlPctOnMargin = Number(((netPnl / Math.max(1, pos.margin || pos.notional)) * 100).toFixed(3));
+  const velocity = Number((pnlPctOnMargin / minutes).toFixed(3));
+  contestant.sprint.velocityScore = Number(((contestant.sprint.velocityScore || 0) + velocity).toFixed(3));
   contestant.position = null;
   return {
-    action: 'CLOSE_FAKE',
+    action: liquidated ? 'FAKE_LIQUIDATED' : 'CLOSE_FAKE_LEVERAGED',
     side: pos.side,
     symbol: pos.symbol,
     entryPrice: pos.entryPrice,
     exitPrice,
+    margin: Number((pos.margin || 0).toFixed(2)),
     notional: Number(pos.notional.toFixed(2)),
+    leverage: pos.leverage || 1,
+    liquidationPrice: pos.liquidationPrice || null,
     grossPnl: Number(grossPnl.toFixed(4)),
     netPnl: Number(netPnl.toFixed(4)),
-    pnlPct: Number(((grossPnl / Math.max(1, pos.notional)) * 100).toFixed(3)),
-    heldMs: now - pos.openedAt
+    pnlPct: pnlPctOnMargin,
+    pnlVelocityPerMin: velocity,
+    liquidated,
+    heldMs
   };
 }
 
@@ -1408,7 +1637,9 @@ function computeEquity(contestant) {
   const price = currentPrices.get(pos.symbol)?.price || pos.entryPrice;
   const sideMult = pos.side === 'LONG' ? 1 : -1;
   const grossPnl = (price - pos.entryPrice) * pos.qty * sideMult;
-  return equity + pos.notional + grossPnl;
+  const margin = Number(pos.margin || pos.notional || 0);
+  const livePositionValue = Math.max(0, margin + grossPnl);
+  return equity + livePositionValue;
 }
 
 function analyzeOutcome(contestant, prediction, outcome, signal) {
@@ -1607,7 +1838,7 @@ function createDecisionFormulaReport(contestant, prediction, signal, reading, no
     result: 'OPEN',
     pnl: 0,
     message: `${contestant.callsign} نشر معادلة قرار على ${prediction.symbol}: ${formula.equation}`,
-    teaching: `أراقب ${prediction.symbol} لأن أعلى حدود المعادلة هي: ${formula.terms.map(t => `${t.feature}=${t.product}`).join(', ') || 'لا توجد حدود قوية'}.`
+    teaching: `أراقب ${prediction.symbol} بهدف سباق 10 دقائق؛ الرافعة الوهمية ${prediction.paperTrade?.leverage || 1}x، وأعلى حدود المعادلة: ${formula.terms.map(t => `${t.feature}=${t.product}`).join(', ') || 'لا توجد حدود قوية'}.`
   };
 }
 
@@ -1841,8 +2072,12 @@ function getHiveSnapshot() {
       totalPnl: Number((totalEquity - INITIAL_FAKE_USD * contestants.length).toFixed(2)),
       openPositions,
       paperTrades: hiveMemory.totalPaperTrades,
-      bestBot: bestBot ? { id: bestBot.id, callsign: bestBot.callsign, equity: Number(computeEquity(bestBot).toFixed(2)), pnl: Number((computeEquity(bestBot) - INITIAL_FAKE_USD).toFixed(2)), mood: bestBot.learning?.mood } : null,
-      worstBot: worstBot ? { id: worstBot.id, callsign: worstBot.callsign, equity: Number(computeEquity(worstBot).toFixed(2)), pnl: Number((computeEquity(worstBot) - INITIAL_FAKE_USD).toFixed(2)), mood: worstBot.learning?.mood } : null
+      maxFakeLeverage: Number(config.maxFakeLeverage || MAX_FAKE_LEVERAGE),
+      sprintHorizonSec: Number(config.arenaHorizonSec || 600),
+      objective: 'MAX_PROFIT_FASTEST_10M_FAKE_LEVERAGE',
+      totalLiquidations: contestants.reduce((sum, c) => sum + Number(c.sprint?.liquidations || 0), 0),
+      bestBot: bestBot ? { id: bestBot.id, callsign: bestBot.callsign, equity: Number(computeEquity(bestBot).toFixed(2)), pnl: Number((computeEquity(bestBot) - INITIAL_FAKE_USD).toFixed(2)), velocity: bestBot.sprint?.velocityScore || 0, liquidations: bestBot.sprint?.liquidations || 0, mood: bestBot.learning?.mood } : null,
+      worstBot: worstBot ? { id: worstBot.id, callsign: worstBot.callsign, equity: Number(computeEquity(worstBot).toFixed(2)), pnl: Number((computeEquity(worstBot) - INITIAL_FAKE_USD).toFixed(2)), velocity: worstBot.sprint?.velocityScore || 0, liquidations: worstBot.sprint?.liquidations || 0, mood: worstBot.learning?.mood } : null
     },
     topPatterns,
     dangerPatterns,
@@ -1850,11 +2085,14 @@ function getHiveSnapshot() {
     lessons: hiveMemory.lessons.slice(-14).reverse(),
     reviews: hiveMemory.reviews.slice(-14).reverse(),
     sharedRules,
-    formulaReports: hiveMemory.formulaReports.slice(-18).reverse(),
-    scientistDebates: hiveMemory.scientistDebates.slice(-16).reverse(),
+    formulaReports: hiveMemory.formulaReports.slice(-22).reverse(),
+    liveThoughts: hiveMemory.liveThoughts.slice(-22).reverse(),
+    scientistDebates: hiveMemory.scientistDebates.slice(-20).reverse(),
     mathConsensus: getMathConsensus(),
     topWeights: getTopMathWeights(14),
     totalFormulaReports: hiveMemory.totalFormulaReports,
+    totalLiveThoughts: hiveMemory.totalLiveThoughts,
+    livingPulseMs: SCIENTIST_THINK_MS,
     collectiveVersion: hiveMemory.collectiveVersion,
     totalResolved: hiveMemory.totalResolved
   };
@@ -1870,7 +2108,7 @@ async function initValidSymbols() {
   // REST exchangeInfo is optional only. If Binance blocks REST from a cloud IP,
   // the game still runs and validates symbols with a safe USDT suffix pattern.
   try {
-    log('api', 'V10 hive scientists mode: optional exchangeInfo validation starting. REST is not used for scans.');
+    log('api', 'V12 10-minute leverage sprint mode: optional exchangeInfo validation starting. REST is not used for scans.');
     const data = await binanceJson('/fapi/v1/exchangeInfo');
     const symbols = Array.isArray(data.symbols) ? data.symbols : [];
     validSymbols = new Set(
@@ -1934,7 +2172,7 @@ async function normalizeConfig(raw) {
       const before = symbols;
       symbols = before.filter(s => /^[A-Z0-9]{2,30}USDT$/.test(s));
       rejected.push(...before.filter(s => !/^[A-Z0-9]{2,30}USDT$/.test(s)));
-      warnings.push('REST symbol validation unavailable; V10 is using safe USDT symbol format checks and Binance WebSocket streams.');
+      warnings.push('REST symbol validation unavailable; V12 is using safe USDT symbol format checks and Binance WebSocket streams.');
     }
 
     if (symbols.length === 0) {
@@ -1948,6 +2186,7 @@ async function normalizeConfig(raw) {
   const windowSec = clampNumber(raw.windowSec, 10, 600, defaultConfig.windowSec);
   const intervalSec = clampNumber(raw.intervalSec, 3, 300, defaultConfig.intervalSec);
   const arenaHorizonSec = clampNumber(raw.arenaHorizonSec, 60, 14400, defaultConfig.arenaHorizonSec);
+  const maxFakeLeverage = clampNumber(raw.maxFakeLeverage, 1, 50, defaultConfig.maxFakeLeverage || MAX_FAKE_LEVERAGE);
 
   return {
     config: {
@@ -1956,7 +2195,8 @@ async function normalizeConfig(raw) {
       minScore,
       windowSec,
       intervalSec,
-      arenaHorizonSec
+      arenaHorizonSec,
+      maxFakeLeverage
     },
     rejected,
     warnings
@@ -2286,12 +2526,13 @@ function formatDuration(seconds) {
 app.listen(PORT, () => {
   startBotLoop();
   startLiveHiveLoop();
+  startScientistThinkLoop();
   ensureTradeStreams(config.symbols);
   initValidSymbols();
   if (AUTOSTART) {
     running = true;
     scheduleNextScan(9000);
   }
-  log('server', `Whale Hunter Radar Hive Scientists V10 online on port ${PORT}. Server-side autonomous paper hive: 500 bots, $1000 fake each, ALL Binance WebSocket mode. Page is viewer only. Monitoring only. No API keys. No real trading.`);
+  log('server', `Whale Hunter Radar 10-Min Leverage Sprint Scientists V12 online on port ${PORT}. Server-side autonomous 10-minute fake-leverage sprint: 500 bots, $1000 fake each, ALL Binance WebSocket mode. Page is viewer only. Monitoring only. No API keys. No real trading.`);
   broadcast('status', { running, scanning, autostart: AUTOSTART, timestamp: Date.now() });
 });

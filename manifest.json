@@ -1,7 +1,7 @@
 {
-  "name": "Whale Hunter Hive Mind",
-  "short_name": "WhaleHive",
-  "description": "A game-style iPad PWA that turns Binance USD-M Futures public whale-flow monitoring into a radar game. Monitoring only.",
+  "name": "Whale Hunter Radar V12",
+  "short_name": "WhaleV12",
+  "description": "10-minute fake leverage sprint whale radar game. Monitoring only.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
