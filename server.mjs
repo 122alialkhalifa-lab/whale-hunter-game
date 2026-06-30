@@ -32,6 +32,9 @@ const WS_RECONNECT_MS = Number(process.env.WS_RECONNECT_MS || 5000);
 const CONTESTANT_COUNT = 500;
 const INITIAL_FAKE_USD = Number(process.env.INITIAL_FAKE_USD || 1000);
 const PAPER_FEE_BPS = Number(process.env.PAPER_FEE_BPS || 4);
+const PAPER_SLIPPAGE_BPS = Number(process.env.PAPER_SLIPPAGE_BPS || 2);
+const MIN_NET_PROFIT_PCT = Number(process.env.MIN_NET_PROFIT_PCT || 0.05);
+const MAX_NEUTRAL_LOSS_PCT = Number(process.env.MAX_NEUTRAL_LOSS_PCT || 0.05);
 const MAX_PAPER_RISK = Number(process.env.MAX_PAPER_RISK || 0.34);
 const LESSON_LOOKBACK_MS = Number(process.env.LESSON_LOOKBACK_MS || 180000);
 const BOT_TICK_MS = Number(process.env.BOT_TICK_MS || 1100);
@@ -143,7 +146,7 @@ app.get('/health', (_req, res) => {
     running,
     scanning,
     timestamp: Date.now(),
-    service: 'Whale Hunter Bitcoin Quant Proof V15',
+    service: 'Whale Hunter Bitcoin Quant Proof V16 Strict Evaluation',
     websocketConnected: wsState.connected,
     publicHealthOnly: true
   });
@@ -270,9 +273,9 @@ app.get('/state', requireViewer, (_req, res) => {
     scientistHiveV11: true,
     livingScientistLoop: true,
     tenMinuteLeverageSprint: true,
-    quantProofV15: true,
-    successFormulaLogsV15: true,
-    bitcoinOnlyV15: true,
+    quantProofV16: true,
+    successFormulaLogsV16: true,
+    bitcoinOnlyV16: true,
     accessControl: true,
     minProofSamples: MIN_PROOF_SAMPLES,
     perfectAlertOnly: PERFECT_ALERT_ONLY,
@@ -702,6 +705,7 @@ function createPrediction(contestant, results, cfg, now) {
     signalScore: signal.score,
     signalTags: signal.tags || [],
     signalSnapshot: signalFeatureSnapshot(signal),
+    signalKey: makeSignalKeyFromSnapshot(signal.symbol, cfg.windowSec, direction, featureVectorFromSignal(signal), signal.timestamp || now),
     formula: reading.formula || null,
     hiveContext: reading.hiveContext || null,
     paperTrade: null,
@@ -855,39 +859,56 @@ function readSignal(contestant, signal, cfg) {
   return { conviction, direction, basis, hiveContext, mathContext, formula };
 }
 
-function resolvePrediction(prediction, exitPrice, now, signal) {
-  const contestant = contestants[prediction.contestantId - 1];
-  const movePct = prediction.entryPrice > 0 ? ((exitPrice - prediction.entryPrice) / prediction.entryPrice) * 100 : 0;
+function computeWatchScore(prediction, movePct) {
   const threshold = prediction.direction === 'WATCH' ? 0.25 : 0.18;
-  const hit = prediction.direction === 'UP'
+  const directional = prediction.direction === 'UP'
     ? movePct >= threshold
     : prediction.direction === 'DOWN'
       ? movePct <= -threshold
       : Math.abs(movePct) <= threshold;
+  return {
+    type: 'WATCH_SCORE',
+    directionalSignalWorked: directional,
+    thresholdPct: threshold,
+    movePct: Number(movePct.toFixed(4)),
+    note: 'WATCH_SCORE measures signal behavior only. It is not TRADE_PROOF and never counts as a win.'
+  };
+}
 
-  const base = hit ? 12 : -6;
-  const moveBonus = hit ? Math.round(Math.min(32, Math.abs(movePct) * 8)) : -Math.round(Math.min(10, Math.abs(movePct) * 2));
-  const confidenceBonus = hit ? Math.round(prediction.conviction / 14) : -Math.round(Math.max(0, prediction.conviction - 70) / 18);
-  const scoreDelta = base + moveBonus + confidenceBonus;
+function resolvePrediction(prediction, exitPrice, now, signal) {
+  const contestant = contestants[prediction.contestantId - 1];
+  const movePct = prediction.entryPrice > 0 ? ((exitPrice - prediction.entryPrice) / prediction.entryPrice) * 100 : 0;
+  const watchScore = computeWatchScore(prediction, movePct);
   const paperResult = closePaperTrade(contestant, prediction, exitPrice, now);
-  const selfReview = analyzeOutcome(contestant, prediction, { hit, movePct, scoreDelta, paperResult }, signal);
-  recordHiveOutcome(contestant, prediction, { hit, movePct, scoreDelta, paperResult, selfReview }, signal);
+  const tradeResult = paperResult?.result || (prediction.direction === 'WATCH' ? 'WATCH_ONLY' : 'NO_TRADE');
+  const hit = tradeResult === 'WIN';
+  const miss = tradeResult === 'LOSS';
+  const neutral = tradeResult === 'NEUTRAL' || tradeResult === 'WATCH_ONLY' || tradeResult === 'NO_TRADE';
+  const scoreDelta = hit
+    ? 12 + Math.round(Math.min(34, Math.max(0, paperResult?.netPnlPct || 0) * 2.5)) + Math.round(prediction.conviction / 16)
+    : miss
+      ? -8 - Math.round(Math.min(18, Math.abs(paperResult?.netPnlPct || 0) * 1.6))
+      : 0;
+  const selfReview = analyzeOutcome(contestant, prediction, { hit, miss, neutral, tradeResult, watchScore, movePct, scoreDelta, paperResult }, signal);
+  recordHiveOutcome(contestant, prediction, { hit, miss, neutral, tradeResult, watchScore, movePct, scoreDelta, paperResult, selfReview }, signal);
 
   contestant.xp = Math.max(0, contestant.xp + scoreDelta);
   contestant.pending = Math.max(0, contestant.pending - 1);
   contestant.games += 1;
-  contestant.lastResult = hit ? 'HIT' : 'MISS';
+  contestant.lastResult = hit ? 'WIN' : miss ? 'LOSS' : tradeResult;
   contestant.lastMovePct = movePct;
   contestant.lastSymbol = prediction.symbol;
   contestant.lastDirection = prediction.direction;
   contestant.lastResolvedAt = now;
-  markBotResolved(contestant, hit, prediction, movePct, now);
+  markBotResolved(contestant, hit, prediction, movePct, now, tradeResult);
   if (hit) {
     contestant.wins += 1;
     contestant.streak = Math.max(1, contestant.streak + 1);
-  } else {
+  } else if (miss) {
     contestant.losses += 1;
     contestant.streak = Math.min(-1, contestant.streak - 1);
+  } else {
+    contestant.streak = 0;
   }
   contestant.bestStreak = Math.max(contestant.bestStreak, contestant.streak);
 
@@ -896,14 +917,64 @@ function resolvePrediction(prediction, exitPrice, now, signal) {
     status: 'RESOLVED',
     exitPrice,
     movePct,
+    watchScore,
     hit,
+    tradeResult,
     scoreDelta,
     paperResult,
     selfReview,
+    proofCounted: Boolean(paperResult?.proofEligible && ['WIN', 'LOSS', 'NEUTRAL'].includes(tradeResult)),
     resolvedAt: now,
     resolvedSignalScore: signal?.score ?? null,
     resolvedSignalTags: signal?.tags ?? []
   };
+}
+
+function quantizeFeatureValue(value, decimals = 2) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '0';
+  return n.toFixed(decimals);
+}
+
+function makeSignalKeyFromSnapshot(symbol, timeframeSec, direction, vector = {}, timestamp = Date.now()) {
+  const bucket = Math.floor(Number(timestamp || Date.now()) / Math.max(1000, Number(timeframeSec || 60) * 1000));
+  const features = Object.keys(vector || {}).sort().map(k => `${k}:${quantizeFeatureValue(vector[k], 2)}`).join(';');
+  return `${symbol || BTC_ONLY_SYMBOL}|${timeframeSec || 60}s|${direction || 'WATCH'}|${bucket}|${features}`;
+}
+
+function getPredictionSignalKey(prediction) {
+  if (prediction.signalKey) return prediction.signalKey;
+  const snap = prediction.signalSnapshot || {};
+  return makeSignalKeyFromSnapshot(prediction.symbol, config.windowSec, prediction.direction, snap.vector || {}, prediction.startTime || Date.now());
+}
+
+function dedupePredictionsForDisplay(predictions = []) {
+  const map = new Map();
+  for (const pred of predictions) {
+    const key = getPredictionSignalKey(pred);
+    const existing = map.get(key);
+    if (!existing) map.set(key, { ...pred, duplicateCount: 1 });
+    else {
+      existing.duplicateCount += 1;
+      if ((pred.conviction || 0) > (existing.conviction || 0)) {
+        map.set(key, { ...pred, duplicateCount: existing.duplicateCount });
+      }
+    }
+  }
+  return [...map.values()];
+}
+
+function rememberCountedTradeKey(key) {
+  if (!key) return false;
+  if (hiveMemory.countedTradeKeys.has(key)) return false;
+  hiveMemory.countedTradeKeys.add(key);
+  hiveMemory.countedTradeKeyQueue.push(key);
+  const max = 6000;
+  while (hiveMemory.countedTradeKeyQueue.length > max) {
+    const old = hiveMemory.countedTradeKeyQueue.shift();
+    hiveMemory.countedTradeKeys.delete(old);
+  }
+  return true;
 }
 
 function getArenaSnapshot(extra = {}) {
@@ -938,12 +1009,12 @@ function getArenaSnapshot(extra = {}) {
     }))
     .sort((a, b) => b.xp - a.xp || b.accuracy - a.accuracy || b.wins - a.wins || a.id - b.id);
 
-  const activeTop = activePredictions
-    .slice()
+  const activeTop = dedupePredictionsForDisplay(activePredictions)
     .sort((a, b) => b.conviction - a.conviction || b.signalScore - a.signalScore)
     .slice(0, 20)
     .map(pred => ({
       ...pred,
+      duplicateCount: pred.duplicateCount || 1,
       msLeft: Math.max(0, pred.resolveAt - Date.now())
     }));
 
@@ -1360,13 +1431,13 @@ function setPatrolTarget(contestant, now) {
   keepBotInsideRadar(bot);
 }
 
-function markBotResolved(contestant, hit, prediction, movePct, now) {
+function markBotResolved(contestant, hit, prediction, movePct, now, tradeResult = null) {
   const bot = contestant.bot || (contestant.bot = createBotState(contestant.id, contestant.style));
-  bot.mode = hit ? 'CELEBRATE' : 'RECALIBRATE';
-  bot.stateTag = hit ? `HIT ${movePct.toFixed(2)}%` : `MISS ${movePct.toFixed(2)}%`;
+  bot.mode = hit ? 'CELEBRATE' : tradeResult === 'NEUTRAL' ? 'ANALYZING' : tradeResult === 'WATCH_ONLY' ? 'ORBIT' : 'RECALIBRATE';
+  bot.stateTag = hit ? `WIN ${movePct.toFixed(2)}%` : tradeResult === 'NEUTRAL' ? `NEUTRAL ${movePct.toFixed(2)}%` : tradeResult === 'WATCH_ONLY' ? 'WATCH ONLY' : `LOSS ${movePct.toFixed(2)}%`;
   bot.targetSymbol = prediction.symbol;
   bot.direction = prediction.direction;
-  bot.energy = clamp(bot.energy + (hit ? 18 : -13), 18, 100);
+  bot.energy = clamp(bot.energy + (hit ? 18 : tradeResult === 'NEUTRAL' || tradeResult === 'WATCH_ONLY' ? 0 : -13), 18, 100);
   const base = symbolRadarPosition(prediction.symbol);
   const angle = ((contestant.id * 23 + now / 1000) % 360) * Math.PI / 180;
   const radius = hit ? 13 + (contestant.id % 9) : 20 + (contestant.id % 13);
@@ -1502,7 +1573,9 @@ function createHiveMemory() {
     patternStats: new Map(),
     symbolStats: new Map(),
     totalResolved: 0,
-    totalPaperTrades: 0
+    totalPaperTrades: 0,
+    countedTradeKeys: new Set(),
+    countedTradeKeyQueue: []
   };
 }
 
@@ -1527,6 +1600,8 @@ function resetHiveMemory() {
   hiveMemory.symbolStats = new Map();
   hiveMemory.totalResolved = 0;
   hiveMemory.totalPaperTrades = 0;
+  hiveMemory.countedTradeKeys = new Set();
+  hiveMemory.countedTradeKeyQueue = [];
 }
 
 function signalFeatureSnapshot(signal) {
@@ -1715,7 +1790,8 @@ function openPaperTrade(contestant, prediction, signal, now) {
   if (margin < 8) return { action: 'SKIP', reason: 'رصيد وهمي غير كافٍ للهامش' };
   const notional = margin * leverage;
   const fee = notional * PAPER_FEE_BPS / 10000;
-  if (contestant.cash < margin + fee) margin = Math.max(0, contestant.cash - fee);
+  const entrySlippage = notional * PAPER_SLIPPAGE_BPS / 10000;
+  if (contestant.cash < margin + fee + entrySlippage) margin = Math.max(0, contestant.cash - fee - entrySlippage);
   const qty = notional / signal.price;
   const side = prediction.direction === 'UP' ? 'LONG' : 'SHORT';
   const liquidationPrice = fakeLiquidationPrice(signal.price, side, leverage);
@@ -1731,12 +1807,13 @@ function openPaperTrade(contestant, prediction, signal, now) {
     entryPrice: signal.price,
     openedAt: now,
     entryFee: fee,
+    entrySlippage,
     strategy: contestant.style.key,
     tags: [...(prediction.signalTags || [])],
     basis: prediction.basis,
     sprintObjective: 'أعلى ربح وهمي خلال 10 دقائق بأسرع وقت مع تحمل خطر التصفية الوهمية'
   };
-  contestant.cash = Math.max(0, contestant.cash - margin - fee);
+  contestant.cash = Math.max(0, contestant.cash - margin - fee - entrySlippage);
   contestant.position = position;
   contestant.trades += 1;
   hiveMemory.totalPaperTrades += 1;
@@ -1751,6 +1828,8 @@ function openPaperTrade(contestant, prediction, signal, now) {
     entryPrice: signal.price,
     liquidationPrice,
     fee: Number(fee.toFixed(4)),
+    entrySlippage: Number(entrySlippage.toFixed(4)),
+    totalEntryCost: Number((fee + entrySlippage).toFixed(4)),
     objective: '10m max-profit sprint',
     text: `${contestant.callsign} فتح ${side} وهمي ${leverage}x على ${signal.symbol}: هامش ${formatUsd(margin)} / حجم ${formatUsd(notional)}`
   };
@@ -1760,43 +1839,72 @@ function closePaperTrade(contestant, prediction, exitPrice, now) {
   const pos = contestant.position;
   if (!pos || pos.symbol !== prediction.symbol) return null;
   const sideMult = pos.side === 'LONG' ? 1 : -1;
+  const movePct = pos.entryPrice > 0 ? ((exitPrice - pos.entryPrice) / pos.entryPrice) * 100 : 0;
   const grossPnl = (exitPrice - pos.entryPrice) * pos.qty * sideMult;
   const closeNotional = pos.qty * exitPrice;
   const exitFee = closeNotional * PAPER_FEE_BPS / 10000;
+  const exitSlippage = closeNotional * PAPER_SLIPPAGE_BPS / 10000;
+  const entryFee = Number(pos.entryFee || 0);
+  const entrySlippage = Number(pos.entrySlippage || 0);
+  const totalFees = entryFee + exitFee;
+  const totalSlippage = entrySlippage + exitSlippage;
   const liquidated = grossPnl <= -Number(pos.margin || pos.notional) * LIQUIDATION_MARGIN_RATIO;
   let netPnl;
   let cashBack;
   if (liquidated) {
-    netPnl = -Number(pos.margin || 0) - Number(pos.entryFee || 0);
+    netPnl = -Number(pos.margin || 0) - entryFee - entrySlippage;
     cashBack = 0;
     contestant.sprint.liquidations += 1;
   } else {
-    netPnl = grossPnl - pos.entryFee - exitFee;
-    cashBack = Number(pos.margin || pos.notional || 0) + grossPnl - exitFee;
+    netPnl = grossPnl - totalFees - totalSlippage;
+    cashBack = Number(pos.margin || pos.notional || 0) + grossPnl - exitFee - exitSlippage;
   }
   contestant.cash += Math.max(0, cashBack);
   contestant.realizedPnl += netPnl;
   const heldMs = now - pos.openedAt;
   const minutes = Math.max(0.05, heldMs / 60000);
-  const pnlPctOnMargin = Number(((netPnl / Math.max(1, pos.margin || pos.notional)) * 100).toFixed(3));
-  const velocity = Number((pnlPctOnMargin / minutes).toFixed(3));
-  contestant.sprint.velocityScore = Number(((contestant.sprint.velocityScore || 0) + velocity).toFixed(3));
+  const margin = Math.max(1, Number(pos.margin || pos.notional));
+  const grossPnlPctOnMargin = Number(((grossPnl / margin) * 100).toFixed(4));
+  const feesPctOnMargin = Number(((totalFees / margin) * 100).toFixed(4));
+  const slippagePctOnMargin = Number(((totalSlippage / margin) * 100).toFixed(4));
+  const netPnlPctOnMargin = Number(((netPnl / margin) * 100).toFixed(4));
+  let result = 'NEUTRAL';
+  if (liquidated || netPnlPctOnMargin < -MAX_NEUTRAL_LOSS_PCT) result = 'LOSS';
+  else if (netPnlPctOnMargin > MIN_NET_PROFIT_PCT) result = 'WIN';
+  const velocity = Number((netPnlPctOnMargin / minutes).toFixed(3));
+  contestant.sprint.velocityScore = Number(((contestant.sprint.velocityScore || 0) + (result === 'NEUTRAL' ? 0 : velocity)).toFixed(3));
   contestant.position = null;
   return {
     action: liquidated ? 'FAKE_LIQUIDATED' : 'CLOSE_FAKE_LEVERAGED',
+    result,
+    isWin: result === 'WIN',
+    isLoss: result === 'LOSS',
+    isNeutral: result === 'NEUTRAL',
     side: pos.side,
     symbol: pos.symbol,
     entryPrice: pos.entryPrice,
     exitPrice,
+    direction: prediction.direction,
+    movePct: Number(movePct.toFixed(4)),
     margin: Number((pos.margin || 0).toFixed(2)),
     notional: Number(pos.notional.toFixed(2)),
     leverage: pos.leverage || 1,
     liquidationPrice: pos.liquidationPrice || null,
     grossPnl: Number(grossPnl.toFixed(4)),
     netPnl: Number(netPnl.toFixed(4)),
-    pnlPct: pnlPctOnMargin,
+    grossPnlPct: grossPnlPctOnMargin,
+    netPnlPct: netPnlPctOnMargin,
+    fees: Number(totalFees.toFixed(4)),
+    slippage: Number(totalSlippage.toFixed(4)),
+    feesPct: feesPctOnMargin,
+    slippagePct: slippagePctOnMargin,
+    minProfitPct: MIN_NET_PROFIT_PCT,
+    neutralBandPct: MAX_NEUTRAL_LOSS_PCT,
+    pnlPct: netPnlPctOnMargin,
     pnlVelocityPerMin: velocity,
     liquidated,
+    countedAsWin: result === 'WIN',
+    proofEligible: true,
     heldMs
   };
 }
@@ -1821,7 +1929,9 @@ function analyzeOutcome(contestant, prediction, outcome, signal) {
   let analysis;
   let nextRule;
 
-  if (outcome.hit || pnl > 0) {
+  const tradeResult = outcome.tradeResult || outcome.paperResult?.result || 'NO_TRADE';
+
+  if (tradeResult === 'WIN') {
     mood = 'REPEAT_WINNER';
     const pattern = tags.slice(0, 3).join(' + ') || prediction.indicator;
     analysis = `ربح/أصاب لأن ${pattern} سبق الحركة على ${prediction.symbol}. سيكرر نفس المنهج عند تكرار العلامات.`;
@@ -1830,7 +1940,7 @@ function analyzeOutcome(contestant, prediction, outcome, signal) {
     contestant.minConviction = clamp(contestant.minConviction - 1, 35, 85);
     for (const tag of tags) contestant.learning.winsByTag[tag] = (contestant.learning.winsByTag[tag] || 0) + 1;
     contestant.learning.repeatRule = nextRule;
-  } else {
+  } else if (tradeResult === 'LOSS') {
     mood = 'RECALIBRATE_LOSS';
     const cause = classifyLossCause(prediction, snap, outcome.movePct, signal);
     analysis = `خسر/أخطأ لأن ${cause}. سيخفف الثقة ويرفع شرط الدخول الوهمي.`;
@@ -1839,6 +1949,13 @@ function analyzeOutcome(contestant, prediction, outcome, signal) {
     contestant.minConviction = clamp(contestant.minConviction + 2, 35, 88);
     for (const tag of tags) contestant.learning.lossesByTag[tag] = (contestant.learning.lossesByTag[tag] || 0) + 1;
     contestant.learning.avoidRule = nextRule;
+  } else {
+    mood = tradeResult === 'WATCH_ONLY' ? 'WATCH_REVIEW' : 'NEUTRAL_REVIEW';
+    analysis = tradeResult === 'WATCH_ONLY'
+      ? `مراقبة فقط على ${prediction.symbol}: لم تُفتح صفقة وهمية، لذلك لا تدخل في TRADE_PROOF.`
+      : `النتيجة محايدة على ${prediction.symbol}: لا يوجد ربح صافي بعد الرسوم والانزلاق؛ لن تُحسب كفوز.`;
+    nextRule = 'لا ترفع وزن المعادلة إلا بعد ربح صافي حقيقي في المحاكاة.';
+    contestant.learning.confidence = clamp(contestant.learning.confidence - 0.5, 5, 100);
   }
 
   contestant.learning.mood = mood;
@@ -1875,8 +1992,16 @@ function classifyLossCause(prediction, snap, movePct, signal) {
 function recordHiveOutcome(contestant, prediction, outcome, signal) {
   hiveMemory.totalResolved += 1;
   const tags = (prediction.signalSnapshot?.tags || prediction.signalTags || ['NO_TAG']).slice(0, 8);
-  const pnl = outcome.paperResult?.netPnl ?? 0;
-  const win = outcome.hit || pnl > 0;
+  const paper = outcome.paperResult;
+  const tradeResult = paper?.result || outcome.tradeResult || (prediction.direction === 'WATCH' ? 'WATCH_ONLY' : 'NO_TRADE');
+  const countableTrade = Boolean(paper?.proofEligible && ['WIN', 'LOSS', 'NEUTRAL'].includes(tradeResult));
+  const pnl = Number(paper?.netPnl ?? 0);
+  const tradeKey = `${getPredictionSignalKey(prediction)}|entry:${Number(prediction.entryPrice || 0).toFixed(2)}|exit:${Number(paper?.exitPrice || 0).toFixed(2)}`;
+  const isNewUniqueTrade = countableTrade ? rememberCountedTradeKey(tradeKey) : false;
+  const duplicateSkipped = countableTrade && !isNewUniqueTrade;
+  const win = tradeResult === 'WIN';
+  const loss = tradeResult === 'LOSS';
+  const neutral = tradeResult === 'NEUTRAL';
   const keys = [
     `${prediction.symbol}|${contestant.style.key}|${prediction.direction}|STYLE`,
     `${contestant.style.key}|${prediction.direction}|STYLE`,
@@ -1886,29 +2011,38 @@ function recordHiveOutcome(contestant, prediction, outcome, signal) {
     ...tags.map(tag => `GLOBAL|${prediction.direction}|${tag}`)
   ];
 
-  for (const key of keys) {
-    const st = hiveMemory.patternStats.get(key) || { key, wins: 0, losses: 0, pnl: 0, games: 0, lastAt: 0 };
-    st.games += 1;
-    if (win) st.wins += 1; else st.losses += 1;
-    st.pnl += pnl;
-    st.lastAt = Date.now();
-    hiveMemory.patternStats.set(key, st);
+  if (isNewUniqueTrade) {
+    for (const key of keys) {
+      const st = hiveMemory.patternStats.get(key) || { key, wins: 0, losses: 0, neutrals: 0, pnl: 0, games: 0, lastAt: 0 };
+      st.games += 1;
+      if (win) st.wins += 1;
+      else if (loss) st.losses += 1;
+      else if (neutral) st.neutrals = Number(st.neutrals || 0) + 1;
+      else st.losses += 1;
+      st.pnl += pnl;
+      st.lastAt = Date.now();
+      hiveMemory.patternStats.set(key, st);
+    }
   }
 
-  const formulaReport = createOutcomeFormulaReport(contestant, prediction, outcome, signal);
+  const formulaReport = createOutcomeFormulaReport(contestant, prediction, { ...outcome, duplicateSkipped, proofCounted: isNewUniqueTrade }, signal);
   pushScientistReport(formulaReport);
-  if (win) pushSuccessfulFormulaLog(buildSuccessfulFormulaLog(contestant, prediction, outcome, signal, formulaReport, keys));
-  applyCollectiveMathLearning(formulaReport);
+  if (isNewUniqueTrade) applyCollectiveMathLearning(formulaReport);
+  if (isNewUniqueTrade && win) pushSuccessfulFormulaLog(buildSuccessfulFormulaLog(contestant, prediction, outcome, signal, formulaReport, keys));
 
   if (outcome.selfReview) {
-    pushLimited(hiveMemory.reviews, outcome.selfReview, 160);
+    pushLimited(hiveMemory.reviews, { ...outcome.selfReview, tradeResult, proofCounted: isNewUniqueTrade, duplicateSkipped }, 160);
     const broad = {
       id: randomUUID(),
       timestamp: Date.now(),
-      type: win ? 'WIN_RULE' : 'LOSS_WARNING',
-      message: outcome.selfReview.nextRule,
+      type: win ? 'WIN_RULE' : loss ? 'LOSS_WARNING' : neutral ? 'NEUTRAL_REVIEW' : 'WATCH_ONLY',
+      message: duplicateSkipped
+        ? `تم تجاهل نسخة مكررة من نفس الإشارة في TRADE_PROOF: ${prediction.symbol}`
+        : outcome.selfReview.nextRule,
       source: contestant.callsign,
       symbol: prediction.symbol,
+      tradeResult,
+      proofCounted: isNewUniqueTrade,
       tags
     };
     pushLimited(hiveMemory.broadcasts, broad, 80);
@@ -2017,27 +2151,44 @@ function createDecisionFormulaReport(contestant, prediction, signal, reading, no
   };
 }
 
+function strictSign(n) {
+  const x = Number(n);
+  if (!Number.isFinite(x) || Object.is(x, -0) || x === 0) return 0;
+  return x > 0 ? 1 : -1;
+}
+
 function createOutcomeFormulaReport(contestant, prediction, outcome, signal) {
   const snap = prediction.signalSnapshot || {};
   const vector = snap.vector || featureVectorFromSignal({ ...snap, tags: prediction.signalTags || [] });
-  const pnl = Number(outcome.paperResult?.netPnl ?? 0);
+  const paper = outcome.paperResult || null;
+  const tradeResult = paper?.result || outcome.tradeResult || (prediction.direction === 'WATCH' ? 'WATCH_ONLY' : 'NO_TRADE');
+  const netPnl = Number(paper?.netPnl ?? 0);
+  const netPnlPct = Number(paper?.netPnlPct ?? 0);
+  const grossPnlPct = Number(paper?.grossPnlPct ?? 0);
+  const feesPct = Number(paper?.feesPct ?? 0);
+  const slippagePct = Number(paper?.slippagePct ?? 0);
   const movePct = Number(outcome.movePct || 0);
-  const win = outcome.hit || pnl > 0;
-  const side = prediction.direction === 'DOWN' ? -1 : prediction.direction === 'UP' ? 1 : 0;
-  const notional = Number(outcome.paperResult?.notional || prediction.paperTrade?.notional || 0);
-  const reward = clamp((win ? 1 : -1) * (0.65 + Math.min(1.35, Math.abs(movePct) / 0.8) + Math.min(1.0, Math.abs(pnl) / 12)), -3, 3);
+  const proofCounted = Boolean(outcome.proofCounted);
+  const duplicateSkipped = Boolean(outcome.duplicateSkipped);
+  let reward = 0;
+  if (tradeResult === 'WIN') reward = Math.abs(movePct) + Math.abs(netPnlPct);
+  else if (tradeResult === 'LOSS') reward = -(Math.abs(movePct) + Math.abs(netPnlPct));
+  else reward = 0;
+  // Mathematically strict: neutral/watch/no-trade outcomes have R=0 even if gross move was positive.
+  if (!['WIN', 'LOSS'].includes(tradeResult)) reward = 0;
   const terms = Object.entries(vector).map(([feature, value]) => ({
     feature,
     value: Number(Number(value).toFixed(4)),
     gradient: Number((reward * Number(value || 0)).toFixed(4))
   })).sort((a, b) => Math.abs(b.gradient) - Math.abs(a.gradient)).slice(0, 7);
-  const equation = `R = sign(PnL)·(|move|+|PnL|) = ${reward.toFixed(2)}; Δwᵢ = η·R·xᵢ`;
-  const latex = `\\Delta w_i=\\eta\\,R\\,x_i`;
+  const equation = `gross=${grossPnlPct.toFixed(4)}% - fees=${feesPct.toFixed(4)}% - slippage=${slippagePct.toFixed(4)}% => net=${netPnlPct.toFixed(4)}%; result=${tradeResult}; R=${reward.toFixed(4)}; Δwᵢ=η·R·xᵢ`;
+  const latex = `R=\operatorname{sign}(net\,PnL)\left(|move|+|net\,PnL|\right),\quad \Delta w_i=\eta R x_i`;
+  const kind = tradeResult === 'WIN' ? 'WIN_PROOF' : tradeResult === 'LOSS' ? 'LOSS_PROOF' : tradeResult === 'NEUTRAL' ? 'NEUTRAL_PROOF' : 'WATCH_SCORE_ONLY';
   return {
     id: randomUUID(),
-    kind: win ? 'WIN_PROOF' : 'LOSS_PROOF',
+    kind,
     timestamp: Date.now(),
-    phase: win ? 'برهان ربح' : 'تشريح خسارة',
+    phase: tradeResult === 'WIN' ? 'برهان ربح صافي' : tradeResult === 'LOSS' ? 'تشريح خسارة صافية' : tradeResult === 'NEUTRAL' ? 'محايد بعد الرسوم والانزلاق' : 'مراقبة فقط',
     contestantId: contestant.id,
     callsign: contestant.callsign,
     style: contestant.style.name,
@@ -2050,15 +2201,28 @@ function createOutcomeFormulaReport(contestant, prediction, outcome, signal) {
     terms,
     vector,
     reward: Number(reward.toFixed(4)),
-    result: win ? 'WIN' : 'LOSS',
-    hit: outcome.hit,
-    pnl,
+    result: tradeResult,
+    hit: tradeResult === 'WIN',
+    pnl: netPnl,
+    netPnl,
+    netPnlPct,
+    grossPnlPct,
+    feesPct,
+    slippagePct,
     movePct,
-    notional,
-    message: `${contestant.callsign} أرسل ${win ? 'برهان ربح' : 'تشريح خسارة'}: ${equation}`,
-    teaching: win
-      ? `الخلية سترفع وزن الحدود التي ظهرت قبل نجاح ${prediction.symbol}.`
-      : `الخلية ستخفض أو تعكس وزن الحدود التي سبقت فشل ${prediction.symbol}.`
+    notional: Number(paper?.notional || prediction.paperTrade?.notional || 0),
+    proofCounted,
+    duplicateSkipped,
+    message: `${contestant.callsign} أرسل نتيجة رياضية: ${equation}`,
+    teaching: duplicateSkipped
+      ? 'هذه نسخة مكررة من نفس الإشارة؛ لا تدخل في TRADE_PROOF ولا تعدل أوزان الخلية.'
+      : tradeResult === 'WIN'
+        ? `الخلية سترفع وزن الحدود فقط لأن الربح الصافي تجاوز ${MIN_NET_PROFIT_PCT}%.`
+        : tradeResult === 'LOSS'
+          ? 'الخلية ستخفض وزن الحدود لأن الصفقة الوهمية خسرت صافيًا.'
+          : tradeResult === 'NEUTRAL'
+            ? 'لا تعلم إيجابي ولا proof win: الحركة لم تغط الرسوم والانزلاق.'
+            : 'WATCH_SCORE فقط، لا يوجد دخول وهمي ولا proof.'
   };
 }
 
@@ -2091,9 +2255,13 @@ function buildSuccessfulFormulaLog(contestant, prediction, outcome, signal, form
     botId: contestant.id,
     style: contestant.style.name,
     styleKey: contestant.style.key,
-    result: 'WIN',
+    result: outcome.paperResult?.result || 'WIN',
     hit: outcome.hit,
     pnl: Number(pnl.toFixed(4)),
+    netPnlPct: Number((outcome.paperResult?.netPnlPct || 0).toFixed(4)),
+    grossPnlPct: Number((outcome.paperResult?.grossPnlPct || 0).toFixed(4)),
+    feesPct: Number((outcome.paperResult?.feesPct || 0).toFixed(4)),
+    slippagePct: Number((outcome.paperResult?.slippagePct || 0).toFixed(4)),
     movePct: Number(movePct.toFixed(4)),
     entryPrice: prediction.entryPrice,
     exitPrice: outcome.paperResult?.exitPrice ?? null,
@@ -2104,6 +2272,8 @@ function buildSuccessfulFormulaLog(contestant, prediction, outcome, signal, form
     decisionEquation: prediction.formula?.equation || null,
     latex: formulaReport?.latex || null,
     reward: formulaReport?.reward ?? null,
+    proofCounted: true,
+    minimumNetProfitPct: MIN_NET_PROFIT_PCT,
     terms: (formulaReport?.terms || []).slice(0, 10),
     tags,
     relatedPatterns,
@@ -2125,7 +2295,7 @@ function formatSuccessLogLine(x) {
   const t = x.isoTime || new Date(x.timestamp || Date.now()).toISOString();
   const best = x.relatedPatterns?.[0];
   const proof = best ? `pattern=${best.wins}/${best.games}${best.losses === 0 ? ' PERFECT_SO_FAR' : ''}` : 'pattern=n/a';
-  return `[${t}] ${x.symbol} ${x.direction} | ${x.bot} ${x.styleKey} | WIN pnl=${Number(x.pnl||0).toFixed(4)} move=${Number(x.movePct||0).toFixed(4)}% lev=${x.leverage}x | ${proof} | equation: ${x.equation}`;
+  return `[${t}] ${x.symbol} ${x.direction} | ${x.bot} ${x.styleKey} | WIN net=${Number(x.netPnlPct||0).toFixed(4)}% gross=${Number(x.grossPnlPct||0).toFixed(4)}% fees+slip=${(Number(x.feesPct||0)+Number(x.slippagePct||0)).toFixed(4)}% move=${Number(x.movePct||0).toFixed(4)}% lev=${x.leverage}x | ${proof} | equation: ${x.equation}`;
 }
 
 function formatSuccessLogBlock(x) {
@@ -2138,7 +2308,7 @@ function formatSuccessLogBlock(x) {
     `Symbol: ${x.symbol}`,
     `Direction: ${x.direction}`,
     `Bot: ${x.bot} / ${x.style}`,
-    `Result: WIN | PnL=${Number(x.pnl||0).toFixed(4)} | Move=${Number(x.movePct||0).toFixed(4)}% | Leverage=${x.leverage}x`,
+    `Result: WIN | NetPnL=${Number(x.netPnlPct||0).toFixed(4)}% | Gross=${Number(x.grossPnlPct||0).toFixed(4)}% | Fees+Slippage=${(Number(x.feesPct||0)+Number(x.slippagePct||0)).toFixed(4)}% | Move=${Number(x.movePct||0).toFixed(4)}% | Leverage=${x.leverage}x`,
     `Equation: ${x.equation}`,
     x.decisionEquation ? `Decision equation: ${x.decisionEquation}` : null,
     best ? `Best related proof: ${best.key} => ${best.wins}/${best.games}, losses=${best.losses}, winRate=${best.winRate}%` : null,
@@ -2168,6 +2338,7 @@ function pushScientistReport(report) {
 function applyCollectiveMathLearning(report) {
   if (!report || !report.terms?.length || !Number.isFinite(Number(report.reward))) return;
   const reward = Number(report.reward);
+  if (!reward) return;
   const lr = HIVE_LEARNING_RATE;
   const changed = [];
   for (const term of report.terms) {
@@ -2289,11 +2460,13 @@ function getProofSnapshot() {
       const strategy = symbolLike ? (parts[1] || 'GLOBAL') : (parts[0] || 'GLOBAL');
       const direction = symbolLike ? (parts[2] || 'WATCH') : (parts[1] || 'WATCH');
       const tag = symbolLike ? parts.slice(3).join('|') : parts.slice(2).join('|');
-      const winRate = st.games ? st.wins / st.games : 0;
-      const avgPnl = st.games ? st.pnl / st.games : 0;
-      const samplePower = Math.min(1, st.games / Math.max(1, MIN_PROOF_SAMPLES));
-      const perfect = st.games >= MIN_PROOF_SAMPLES && st.losses === 0 && st.wins > 0;
-      const status = perfect ? 'PERFECT_SO_FAR' : (st.games >= MIN_PROOF_SAMPLES && winRate >= 0.8 ? 'HIGH_PROBABILITY' : 'UNDER_STUDY');
+      const closedTrials = Number(st.games || 0);
+      const neutrals = Number(st.neutrals || 0);
+      const winRate = closedTrials ? st.wins / closedTrials : 0;
+      const avgPnl = closedTrials ? st.pnl / closedTrials : 0;
+      const samplePower = Math.min(1, closedTrials / Math.max(1, MIN_PROOF_SAMPLES));
+      const perfect = closedTrials >= MIN_PROOF_SAMPLES && st.wins === closedTrials && st.losses === 0 && neutrals === 0;
+      const status = perfect ? 'PERFECT_SO_FAR' : (closedTrials >= MIN_PROOF_SAMPLES && winRate >= 0.8 ? 'HIGH_PROBABILITY' : 'UNDER_STUDY');
       const proofScore = perfect
         ? 100
         : clamp(winRate * 82 + samplePower * 18 + Math.max(-10, Math.min(10, avgPnl / 2)), 0, 99.9);
@@ -2305,7 +2478,9 @@ function getProofSnapshot() {
         tag: tag || 'STYLE',
         wins: st.wins,
         losses: st.losses,
-        games: st.games,
+        neutrals,
+        games: closedTrials,
+        realClosedTrials: closedTrials,
         pnl: Number(st.pnl.toFixed(2)),
         avgPnl: Number(avgPnl.toFixed(3)),
         winRate: Number((winRate * 100).toFixed(2)),
@@ -2314,7 +2489,7 @@ function getProofSnapshot() {
         status,
         lastAt: st.lastAt,
         ageSec: st.lastAt ? Math.round((now - st.lastAt) / 1000) : null,
-        equation: `${direction}_PROOF = wins(${st.wins}) / trials(${st.games})${st.losses === 0 ? ' = 100%' : ''}`,
+        equation: `${direction}_TRADE_PROOF = real_wins(${st.wins}) / real_closed_trials(${closedTrials}); neutrals=${neutrals}; losses=${st.losses}${perfect ? ' = 100% PERFECT-SO-FAR' : ''}`,
         alert: perfect ? '👑 PERFECT-SO-FAR WATCH' : (status === 'HIGH_PROBABILITY' ? '🧠 HIGH PROBABILITY' : '🧪 UNDER STUDY')
       };
     });
@@ -2457,7 +2632,7 @@ async function initValidSymbols() {
   // REST exchangeInfo is optional only. If Binance blocks REST from a cloud IP,
   // the game still runs and validates symbols with a safe USDT suffix pattern.
   try {
-    log('api', 'V15 Bitcoin Quant Proof mode: optional exchangeInfo validation starting. REST is not used for scans.');
+    log('api', 'V16 Bitcoin Quant Proof mode: optional exchangeInfo validation starting. REST is not used for scans.');
     const data = await binanceJson('/fapi/v1/exchangeInfo');
     const symbols = Array.isArray(data.symbols) ? data.symbols : [];
     validSymbols = new Set(
@@ -2480,7 +2655,7 @@ async function initValidSymbols() {
   } catch (error) {
     validSymbols = new Set();
     exchangeInfoLoadedAt = null;
-    log('api-error', `Optional exchangeInfo validation skipped: ${error.message || error}. V15 will continue with BTCUSDT WebSocket data.`);
+    log('api-error', `Optional exchangeInfo validation skipped: ${error.message || error}. V16 will continue with BTCUSDT WebSocket data.`);
     const normalized = await normalizeConfig(config);
     config = normalized.config;
     ensureTradeStreams(config.symbols);
@@ -2820,6 +2995,6 @@ app.listen(PORT, () => {
     running = true;
     scheduleNextScan(9000);
   }
-  log('server', `Whale Hunter Bitcoin Quant Proof V15 online on port ${PORT}. Bitcoin-only BTCUSDT autonomous quant-proof fake-leverage sprint: 500 bots, $1000 fake each. Page is viewer only. Monitoring only. No API keys. No real trading.`);
+  log('server', `Whale Hunter Bitcoin Quant Proof V16 online on port ${PORT}. Bitcoin-only BTCUSDT autonomous quant-proof fake-leverage sprint: 500 bots, $1000 fake each. Page is viewer only. Monitoring only. No API keys. No real trading.`);
   broadcast('status', { running, scanning, autostart: AUTOSTART, timestamp: Date.now() });
 });

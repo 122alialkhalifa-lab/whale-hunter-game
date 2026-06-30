@@ -1,4 +1,4 @@
-# Whale Hunter Bitcoin Quant Proof V15
+# Whale Hunter Bitcoin Quant Proof V16
 
 Bitcoin-only edition.
 
@@ -79,3 +79,31 @@ You want to see:
 - No guaranteed profit claims.
 - Visible warning remains: leverage can wipe accounts.
 - `100%` means perfect inside the app's recorded paper-simulation history so far, not guaranteed future profit.
+
+## V16 Strict Evaluation Fixes
+
+This version fixes the evaluation logic, not only the message text.
+
+- `WATCH_SCORE` is separated from `TRADE_PROOF`.
+- WATCH-only decisions never count as wins.
+- A paper trade only becomes `WIN` when net PnL after fees and slippage is greater than `MIN_NET_PROFIT_PCT`.
+- Neutral trades are closed trials but not wins.
+- `PERFECT-SO-FAR` means `wins === real_closed_trials` with zero losses and zero neutral trials after the minimum sample count.
+- Learning reward uses strict net result:
+
+```text
+if result == WIN:  R = abs(move) + abs(netPnL%)
+if result == LOSS: R = -(abs(move) + abs(netPnL%))
+else:              R = 0
+```
+
+- Duplicate BTCUSDT setups with the same timeframe, direction, feature vector, and time bucket are not counted repeatedly in proof stats.
+
+Optional Render Environment Variables:
+
+```text
+PAPER_FEE_BPS=4
+PAPER_SLIPPAGE_BPS=2
+MIN_NET_PROFIT_PCT=0.05
+MAX_NEUTRAL_LOSS_PCT=0.05
+```

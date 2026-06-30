@@ -1,6 +1,6 @@
 {
-  "name": "whale-hunter-bitcoin-quant-proof-v15",
-  "version": "15.0.0",
+  "name": "whale-hunter-bitcoin-quant-proof-v16",
+  "version": "16.0.0",
   "description": "Bitcoin-only game-style Binance Futures quant-proof paper arena with successful equation logs and access control.",
   "type": "module",
   "main": "server.mjs",
