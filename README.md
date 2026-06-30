@@ -1,72 +1,45 @@
-# Whale Hunter Radar — 10-Min Leverage Sprint Scientists V12
+# Whale Hunter Quant Proof V13
 
-لعبة مراقبة حيتان بأسلوب Game HUD على الآيباد. هذه النسخة تجعل كل Bot يدخل سباقًا وهميًا مدته 10 دقائق: هدفه أعلى ربح وهمي ممكن في أقل وقت ممكن، مع إمكانية استخدام رافعة وهمية داخل اللعبة فقط.
+لعبة/مختبر مراقبة رياضي على الآيباد. كل عملة من أكبر عملات Binance USDⓈ-M Futures تعتبر مسألة رياضية مستقلة، و500 روبوت علماء يحاولون اكتشاف أنماط صعود/نزول متكررة النجاح.
 
-## قواعد V12
+## المهم
 
-- 500 Bot، كل واحد يبدأ بـ $1000 وهمية.
-- مدة الجولة الافتراضية: 600 ثانية = 10 دقائق.
-- الرافعة وهمية فقط، افتراضيًا حتى 20x ويمكن تغييرها من `MAX_FAKE_LEVERAGE`.
-- لا يوجد تداول حقيقي، لا Binance API keys، لا أوامر شراء أو بيع.
-- الأسعار والمؤشرات تأتي من Binance Futures public WebSocket.
-- كل Bot يحسب معادلة سرعة الربح:
+- مراقبة وتداول وهمي فقط.
+- لا Binance API keys.
+- لا شراء حقيقي ولا بيع حقيقي.
+- الأسعار والمؤشرات من Binance Futures public WebSocket.
+- التنبيه القوي `PERFECT-SO-FAR` يعني أن النمط لم يفشل داخل سجل اللعبة حتى الآن بعد وصوله إلى عدد تجارب كافٍ. هذا ليس ضمانًا للمستقبل.
 
-```text
-V = PnL%/min + Lev + sign(direction)·Δprice
-Δwᵢ = μ·V·xᵢ
-```
+## الجديد في V13
 
-إذا الربح يتحقق بسرعة، يرفع وزن المؤشرات التي ساعدته. إذا انعكس السعر أو حصلت تصفية وهمية، يخفض وزنها وينشر تقريرًا لباقي الروبوتات.
-
-لعبة مراقبة حيتان بأسلوب Game HUD للآيباد. هذه النسخة تجعل الـ 500 Bot يعملون مثل **علماء رياضيات داخل خلية نحل**:
-
-- كل Bot يبدأ بـ `$1000` وهمية فقط.
-- الأسعار والمؤشرات من Binance USDⓈ-M Futures public WebSocket.
-- لا يوجد تداول حقيقي، لا API keys، لا أوامر شراء أو بيع.
-- كل Bot يفتح قرارات/مراكز وهمية داخل اللعبة فقط.
-- كل Bot يرسل **معادلة قرار** لحظيًا:
-
-```text
-C = 50 + 38Σ(wᵢ·xᵢ) + H
-```
-
-- بعد الربح أو الخسارة يرسل **برهانًا/تشريحًا رياضيًا**:
-
-```text
-R = sign(PnL)·(|move|+|PnL|)
-Δwᵢ = η·R·xᵢ
-```
-
-- كل الروبوتات تتعلم من التقرير فورًا عبر Hive Mind.
-- الرابح يرفع وزن المؤشرات التي سبقت النجاح.
-- الخاسر يخفض أو يعكس وزن المؤشرات التي سبقت الفشل.
-- الواجهة تعرض:
-  - Live Math Reports
-  - Collective Equation
-  - Shared Winning Rules
-  - Loss Reviews
-  - Coin Memory
-  - Pattern Brain
+- لوحة دخول بصلاحيات.
+- Owner: تشغيل/إيقاف/تعديل/تصدير/تصفير المختبر.
+- Viewer: مشاهدة فقط بدون تحكم.
+- `/health` خفيف ومناسب لمواقع ping.
+- `/proof` يعرض أنماط 100% داخل السجل.
+- `Coin Proof Lab`: مستوى فهم كل عملة.
+- `Pattern Vault`: سجل نجاح/فشل المعادلات.
+- `Live Math Reports`: تقارير الروبوتات ومعادلاتها لحظيًا.
 
 ## التشغيل
 
 ```bash
-rm -f package-lock.json && npm install --registry=https://registry.npmjs.org/
+npm install
 npm start
 ```
 
-افتح:
+ثم افتح:
 
 ```text
 http://localhost:3000
 ```
 
-## على Render
+## Render
 
 Build Command:
 
 ```bash
-rm -f package-lock.json && rm -f package-lock.json && npm install --registry=https://registry.npmjs.org/ --registry=https://registry.npmjs.org/
+rm -f package-lock.json && npm install --registry=https://registry.npmjs.org/
 ```
 
 Start Command:
@@ -75,21 +48,60 @@ Start Command:
 node server.mjs
 ```
 
-يفضل Region: Singapore.
+Region المفضل إذا Binance حظر أمريكا: Singapore.
 
-## ملاحظات أمان
+## صلاحيات الدخول
 
-مراقبة ومحاكاة فقط. ليست توصية مالية. الرافعة قد تصفّر الحساب.
-لا توجد مفاتيح Binance، لا تنفيذ صفقات، لا auto-buy، لا auto-sell.
+يفضل تغيير الأكواد من Render Environment Variables:
 
+```text
+OWNER_PIN=your-owner-pin
+VIEWER_PIN=your-viewer-pin
+AUTH_SECRET=long-random-secret
+MIN_PROOF_SAMPLES=25
+```
 
-## V11 Living Brain Upgrade
+الأكواد الافتراضية للتجربة فقط:
 
-هذه النسخة لا تنتظر نهاية الجولة فقط. كل 1.5 ثانية تقريبًا يرسل بعض الروبوتات نبض تفكير حي:
+```text
+OWNER-7777
+VIEW-1111
+```
 
-- فرضية الروبوت الحالية.
-- معادلته اللحظية `L = sign(dir)·Δprice + PnL/8`.
-- تحديث أوزان صغير `live Δwᵢ = μ·L·xᵢ`.
-- هل الفرضية تتأكد أو تبدأ تخدع الروبوت.
+## Endpoints
 
-الصفحة مجرد شاشة مشاهدة؛ التحليل والتعلم يعملان على السيرفر ما دام Render صاحي.
+Public:
+
+```text
+GET /health
+POST /auth/login
+POST /auth/logout
+GET /auth/me
+```
+
+Viewer/Owner:
+
+```text
+GET /events
+GET /state
+GET /hive
+GET /arena
+GET /formulas
+GET /proof
+```
+
+Owner only:
+
+```text
+POST /start
+POST /stop
+POST /scan
+POST /config
+POST /arena/reset
+POST /admin/reset-lab
+GET /admin/export
+```
+
+## تنبيه السلامة
+
+مراقبة فقط. ليست توصية مالية. الرافعة قد تصفّر الحساب. كل الأموال والصفقات داخل اللعبة وهمية.

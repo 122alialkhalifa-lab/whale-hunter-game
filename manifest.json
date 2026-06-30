@@ -1,24 +1,14 @@
 {
-  "name": "Whale Hunter Radar V12",
-  "short_name": "WhaleV12",
-  "description": "10-minute fake leverage sprint whale radar game. Monitoring only.",
+  "name": "Whale Hunter Quant Proof",
+  "short_name": "WhaleProof",
+  "description": "Game-style Binance Futures whale-flow mathematical proof lab. Monitoring and paper simulation only.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "theme_color": "#00e5ff",
   "background_color": "#050711",
-  "categories": [
-    "finance",
-    "utilities",
-    "games"
-  ],
+  "theme_color": "#00e5ff",
   "icons": [
-    {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
   ]
 }

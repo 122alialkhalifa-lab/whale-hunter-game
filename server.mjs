@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 
@@ -10,6 +10,13 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const AUTH_COOKIE = 'whr_session';
+const AUTH_SECRET = process.env.AUTH_SECRET || 'change-this-secret-in-render';
+const OWNER_PIN = process.env.OWNER_PIN || 'OWNER-7777';
+const VIEWER_PIN = process.env.VIEWER_PIN || 'VIEW-1111';
+const REQUIRE_AUTH = String(process.env.REQUIRE_AUTH || 'true').toLowerCase() !== 'false';
+const MIN_PROOF_SAMPLES = Number(process.env.MIN_PROOF_SAMPLES || 25);
+const PERFECT_ALERT_ONLY = String(process.env.PERFECT_ALERT_ONLY || 'true').toLowerCase() !== 'false';
 const BINANCE_BASE = 'https://fapi.binance.com';
 const BINANCE_WS_STREAM_BASE = 'wss://fstream.binance.com/market/stream?streams=';
 const BINANCE_WS_DISCOVERY_URL = 'wss://fstream.binance.com/market/ws/!miniTicker@arr';
@@ -133,38 +140,82 @@ app.get('/health', (_req, res) => {
     running,
     scanning,
     timestamp: Date.now(),
-    config,
-    arena: getArenaSnapshot(),
-    botSwarm: getBotSwarm(),
-    hive: getHiveSnapshot(),
-    exchangeInfoLoadedAt,
-    validSymbolCount: validSymbols.size,
-    lastScanAt: lastScan?.timestamp ?? null,
-    marketDataMode: isAllSymbolsRequest(config.symbols) ? 'websocket-all-binance-usdt' : 'websocket-selected-symbols',
-    allSymbolsMode: isAllSymbolsRequest(config.symbols),
-    activeSymbolCount: getScanSymbols(config).length,
-    websocket: {
-      connected: wsState.connected,
-      mode: wsState.mode,
-      symbolsKey: wsState.key,
-      lastMessageAt: wsState.lastMessageAt,
-      discoveredSymbols: wsState.discoveredSymbols.size,
-      subscribedSymbols: wsState.subscribedSymbols.size,
-      maxSymbols: MAX_SYMBOLS
-    }
+    service: 'Whale Hunter Quant Proof V13',
+    websocketConnected: wsState.connected,
+    publicHealthOnly: true
   });
 });
 
-app.get('/arena', (_req, res) => {
+app.get('/auth/me', (req, res) => {
+  const user = getSessionUser(req);
+  res.json({
+    ok: true,
+    authenticated: Boolean(user),
+    role: user?.role || 'guest',
+    canControl: user?.role === 'owner' || !REQUIRE_AUTH,
+    canView: Boolean(user) || !REQUIRE_AUTH,
+    requireAuth: REQUIRE_AUTH,
+    timestamp: Date.now()
+  });
+});
+
+app.post('/auth/login', (req, res) => {
+  const pin = String(req.body?.pin || '').trim();
+  let role = null;
+  if (!REQUIRE_AUTH) role = 'owner';
+  else if (safeEqual(pin, OWNER_PIN)) role = 'owner';
+  else if (safeEqual(pin, VIEWER_PIN)) role = 'viewer';
+
+  if (!role) {
+    return res.status(401).json({ ok: false, error: 'BAD_PIN', message: 'Wrong access code.' });
+  }
+
+  const token = signSession({ role, iat: Date.now(), id: randomUUID() });
+  res.setHeader('Set-Cookie', buildCookie(req, token));
+  res.json({ ok: true, role, canControl: role === 'owner', timestamp: Date.now() });
+});
+
+app.post('/auth/logout', (req, res) => {
+  res.setHeader('Set-Cookie', buildCookie(req, '', 0));
+  res.json({ ok: true, timestamp: Date.now() });
+});
+
+app.get('/proof', requireViewer, (_req, res) => {
+  res.json({ ok: true, proof: getProofSnapshot(), timestamp: Date.now() });
+});
+
+app.get('/admin/export', requireOwner, (_req, res) => {
+  res.json({
+    ok: true,
+    exportedAt: Date.now(),
+    config,
+    arena: getArenaSnapshot(),
+    hive: getHiveSnapshot(),
+    proof: getProofSnapshot(),
+    lastScan,
+    note: 'Paper-simulation data only. No real trades, no API keys.'
+  });
+});
+
+app.post('/admin/reset-lab', requireOwner, (_req, res) => {
+  resetArena();
+  const proof = getProofSnapshot();
+  broadcast('arena', getArenaSnapshot());
+  broadcast('proof', proof);
+  log('admin', 'Owner reset the mathematical lab and paper arena.');
+  res.json({ ok: true, arena: getArenaSnapshot(), proof });
+});
+
+app.get('/arena', requireViewer, (_req, res) => {
   const arena = getArenaSnapshot();
   res.json({ ok: true, arena, botSwarm: arena.botSwarm, hive: arena.hive });
 });
 
-app.get('/hive', (_req, res) => {
+app.get('/hive', requireViewer, (_req, res) => {
   res.json({ ok: true, hive: getHiveSnapshot(), arena: getArenaSnapshot(), running, timestamp: Date.now() });
 });
 
-app.get('/formulas', (_req, res) => {
+app.get('/formulas', requireViewer, (_req, res) => {
   res.json({
     ok: true,
     timestamp: Date.now(),
@@ -175,7 +226,7 @@ app.get('/formulas', (_req, res) => {
   });
 });
 
-app.get('/state', (_req, res) => {
+app.get('/state', requireViewer, (_req, res) => {
   res.json({
     ok: true,
     running,
@@ -184,6 +235,10 @@ app.get('/state', (_req, res) => {
     scientistHiveV11: true,
     livingScientistLoop: true,
     tenMinuteLeverageSprint: true,
+    quantProofV13: true,
+    accessControl: true,
+    minProofSamples: MIN_PROOF_SAMPLES,
+    perfectAlertOnly: PERFECT_ALERT_ONLY,
     fakeLeverageOnly: true,
     collectiveMathLearning: true,
     timestamp: Date.now(),
@@ -201,7 +256,7 @@ app.get('/state', (_req, res) => {
   });
 });
 
-app.post('/arena/reset', (_req, res) => {
+app.post('/arena/reset', requireOwner, (_req, res) => {
   resetArena();
   const arena = getArenaSnapshot();
   log('arena', 'Prediction Arena reset: 500 contestants are ready for a new tournament.');
@@ -209,7 +264,7 @@ app.post('/arena/reset', (_req, res) => {
   res.json({ ok: true, arena });
 });
 
-app.get('/events', (req, res) => {
+app.get('/events', requireViewer, (req, res) => {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache, no-transform',
@@ -241,7 +296,7 @@ app.get('/events', (req, res) => {
   });
 });
 
-app.post('/config', async (req, res) => {
+app.post('/config', requireOwner, async (req, res) => {
   const incoming = req.body || {};
   const normalized = await normalizeConfig({ ...config, ...incoming });
   config = normalized.config;
@@ -252,7 +307,7 @@ app.post('/config', async (req, res) => {
   res.json({ ok: true, config, rejected: normalized.rejected, warnings: normalized.warnings });
 });
 
-app.post('/start', async (_req, res) => {
+app.post('/start', requireOwner, async (_req, res) => {
   if (!running) {
     running = true;
     ensureTradeStreams(config.symbols);
@@ -263,7 +318,7 @@ app.post('/start', async (_req, res) => {
   res.json({ ok: true, running, config, arena: getArenaSnapshot() });
 });
 
-app.post('/stop', (_req, res) => {
+app.post('/stop', requireOwner, (_req, res) => {
   running = false;
   if (scanTimer) clearTimeout(scanTimer);
   scanTimer = null;
@@ -272,7 +327,7 @@ app.post('/stop', (_req, res) => {
   res.json({ ok: true, running });
 });
 
-app.post('/scan', async (_req, res) => {
+app.post('/scan', requireOwner, async (_req, res) => {
   const result = await runScan({ manual: true });
   res.status(result.ok ? 200 : 429).json(result);
 });
@@ -281,6 +336,77 @@ app.use((err, _req, res, _next) => {
   console.error(err);
   res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: err.message || String(err) });
 });
+
+
+function safeEqual(a, b) {
+  const aa = Buffer.from(String(a || ''));
+  const bb = Buffer.from(String(b || ''));
+  if (aa.length !== bb.length) return false;
+  return timingSafeEqual(aa, bb);
+}
+
+function parseCookies(req) {
+  const header = req.headers.cookie || '';
+  const out = {};
+  for (const part of header.split(';')) {
+    const i = part.indexOf('=');
+    if (i < 0) continue;
+    const key = part.slice(0, i).trim();
+    const val = part.slice(i + 1).trim();
+    out[key] = decodeURIComponent(val);
+  }
+  return out;
+}
+
+function signSession(payload) {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = createHmac('sha256', AUTH_SECRET).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+function verifySession(token) {
+  if (!token || typeof token !== 'string' || !token.includes('.')) return null;
+  const [body, sig] = token.split('.');
+  const expected = createHmac('sha256', AUTH_SECRET).update(body).digest('base64url');
+  if (!safeEqual(sig, expected)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    if (!payload || !['owner', 'viewer'].includes(payload.role)) return null;
+    const ageMs = Date.now() - Number(payload.iat || 0);
+    if (ageMs > 1000 * 60 * 60 * 24 * 14) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function getSessionUser(req) {
+  if (!REQUIRE_AUTH) return { role: 'owner', id: 'auth-disabled' };
+  const cookies = parseCookies(req);
+  return verifySession(cookies[AUTH_COOKIE]);
+}
+
+function buildCookie(req, value, maxAge = 60 * 60 * 24 * 14) {
+  const secure = String(req.headers['x-forwarded-proto'] || '').includes('https') || req.secure;
+  const parts = [`${AUTH_COOKIE}=${encodeURIComponent(value)}`, 'Path=/', 'HttpOnly', 'SameSite=Lax', `Max-Age=${maxAge}`];
+  if (secure) parts.push('Secure');
+  return parts.join('; ');
+}
+
+function requireViewer(req, res, next) {
+  const user = getSessionUser(req);
+  if (!user) return res.status(401).json({ ok: false, error: 'AUTH_REQUIRED', message: 'Login required.' });
+  req.user = user;
+  next();
+}
+
+function requireOwner(req, res, next) {
+  const user = getSessionUser(req);
+  if (!user) return res.status(401).json({ ok: false, error: 'AUTH_REQUIRED', message: 'Login required.' });
+  if (user.role !== 'owner') return res.status(403).json({ ok: false, error: 'OWNER_ONLY', message: 'Owner permission required.' });
+  req.user = user;
+  next();
+}
 
 function scheduleNextScan(delayMs = config.intervalSec * 1000) {
   if (!running) return;
@@ -375,6 +501,7 @@ async function runScan({ manual = false } = {}) {
   scanning = false;
   log('scanner', `Scan complete: ${hot.length} hot signal(s), top target ${top || 'N/A'}, ${errors.length} API error(s). Arena open: ${arena.openCount}, resolved: ${arena.resolvedCount}.`);
   broadcast('scan', lastScan);
+  broadcast('proof', getProofSnapshot());
   broadcast('arena', arena);
   broadcast('status', { running, scanning, timestamp: Date.now() });
   return lastScan;
@@ -1707,7 +1834,10 @@ function recordHiveOutcome(contestant, prediction, outcome, signal) {
   const pnl = outcome.paperResult?.netPnl ?? 0;
   const win = outcome.hit || pnl > 0;
   const keys = [
+    `${prediction.symbol}|${contestant.style.key}|${prediction.direction}|STYLE`,
     `${contestant.style.key}|${prediction.direction}|STYLE`,
+    ...tags.map(tag => `${prediction.symbol}|${contestant.style.key}|${prediction.direction}|${tag}`),
+    ...tags.map(tag => `${prediction.symbol}|GLOBAL|${prediction.direction}|${tag}`),
     ...tags.map(tag => `${contestant.style.key}|${prediction.direction}|${tag}`),
     ...tags.map(tag => `GLOBAL|${prediction.direction}|${tag}`)
   ];
@@ -2015,6 +2145,90 @@ function getSharedHiveBoost(contestant, signal, direction) {
   };
 }
 
+
+function getProofSnapshot() {
+  const now = Date.now();
+  const rows = [...hiveMemory.patternStats.values()]
+    .filter(st => st.games >= Math.max(1, Math.floor(MIN_PROOF_SAMPLES / 2)))
+    .map(st => {
+      const parts = String(st.key || '').split('|');
+      const symbolLike = parts[0] && /USDT$/.test(parts[0]);
+      const symbol = symbolLike ? parts[0] : 'GLOBAL';
+      const strategy = symbolLike ? (parts[1] || 'GLOBAL') : (parts[0] || 'GLOBAL');
+      const direction = symbolLike ? (parts[2] || 'WATCH') : (parts[1] || 'WATCH');
+      const tag = symbolLike ? parts.slice(3).join('|') : parts.slice(2).join('|');
+      const winRate = st.games ? st.wins / st.games : 0;
+      const avgPnl = st.games ? st.pnl / st.games : 0;
+      const samplePower = Math.min(1, st.games / Math.max(1, MIN_PROOF_SAMPLES));
+      const perfect = st.games >= MIN_PROOF_SAMPLES && st.losses === 0 && st.wins > 0;
+      const status = perfect ? 'PERFECT_SO_FAR' : (st.games >= MIN_PROOF_SAMPLES && winRate >= 0.8 ? 'HIGH_PROBABILITY' : 'UNDER_STUDY');
+      const proofScore = perfect
+        ? 100
+        : clamp(winRate * 82 + samplePower * 18 + Math.max(-10, Math.min(10, avgPnl / 2)), 0, 99.9);
+      return {
+        key: st.key,
+        symbol,
+        strategy,
+        direction,
+        tag: tag || 'STYLE',
+        wins: st.wins,
+        losses: st.losses,
+        games: st.games,
+        pnl: Number(st.pnl.toFixed(2)),
+        avgPnl: Number(avgPnl.toFixed(3)),
+        winRate: Number((winRate * 100).toFixed(2)),
+        proofScore: Number(proofScore.toFixed(2)),
+        perfect,
+        status,
+        lastAt: st.lastAt,
+        ageSec: st.lastAt ? Math.round((now - st.lastAt) / 1000) : null,
+        equation: `${direction}_PROOF = wins(${st.wins}) / trials(${st.games})${st.losses === 0 ? ' = 100%' : ''}`,
+        alert: perfect ? '👑 PERFECT-SO-FAR WATCH' : (status === 'HIGH_PROBABILITY' ? '🧠 HIGH PROBABILITY' : '🧪 UNDER STUDY')
+      };
+    });
+
+  const perfect = rows.filter(r => r.perfect)
+    .sort((a, b) => b.games - a.games || b.avgPnl - a.avgPnl)
+    .slice(0, 18);
+  const highProbability = rows.filter(r => !r.perfect && r.status === 'HIGH_PROBABILITY')
+    .sort((a, b) => b.proofScore - a.proofScore || b.games - a.games)
+    .slice(0, 18);
+  const underStudy = rows.filter(r => r.status === 'UNDER_STUDY')
+    .sort((a, b) => b.games - a.games || b.proofScore - a.proofScore)
+    .slice(0, 18);
+
+  const coinMap = new Map();
+  for (const r of rows.filter(r => r.symbol !== 'GLOBAL')) {
+    const c = coinMap.get(r.symbol) || { symbol: r.symbol, patterns: 0, perfect: 0, highProbability: 0, games: 0, wins: 0, losses: 0, bestProof: 0, bestPattern: null };
+    c.patterns += 1;
+    c.games += r.games;
+    c.wins += r.wins;
+    c.losses += r.losses;
+    if (r.perfect) c.perfect += 1;
+    if (r.status === 'HIGH_PROBABILITY') c.highProbability += 1;
+    if (r.proofScore > c.bestProof) { c.bestProof = r.proofScore; c.bestPattern = r; }
+    coinMap.set(r.symbol, c);
+  }
+  const coinBrains = [...coinMap.values()].map(c => {
+    const sampleScore = Math.min(40, c.games / 4);
+    const quality = Math.min(40, c.bestProof * 0.4);
+    const perfectBonus = Math.min(20, c.perfect * 5 + c.highProbability * 2);
+    return { ...c, understanding: Number(clamp(sampleScore + quality + perfectBonus, 0, 100).toFixed(1)) };
+  }).sort((a, b) => b.understanding - a.understanding || b.games - a.games).slice(0, 100);
+
+  return {
+    timestamp: now,
+    minProofSamples: MIN_PROOF_SAMPLES,
+    perfectAlertOnly: PERFECT_ALERT_ONLY,
+    definition: 'PERFECT-SO-FAR means the pattern has zero losses inside the live paper-simulation record and reached the minimum sample count. It is not a guarantee of future profit.',
+    perfect,
+    highProbability,
+    underStudy,
+    coinBrains,
+    counts: { perfect: perfect.length, highProbability: highProbability.length, trackedCoins: coinBrains.length, totalPatterns: rows.length }
+  };
+}
+
 function getHiveSnapshot() {
   const equities = contestants.map(c => computeEquity(c));
   const totalEquity = equities.reduce((a, b) => a + b, 0);
@@ -2088,6 +2302,7 @@ function getHiveSnapshot() {
     formulaReports: hiveMemory.formulaReports.slice(-22).reverse(),
     liveThoughts: hiveMemory.liveThoughts.slice(-22).reverse(),
     scientistDebates: hiveMemory.scientistDebates.slice(-20).reverse(),
+    proof: getProofSnapshot(),
     mathConsensus: getMathConsensus(),
     topWeights: getTopMathWeights(14),
     totalFormulaReports: hiveMemory.totalFormulaReports,
@@ -2108,7 +2323,7 @@ async function initValidSymbols() {
   // REST exchangeInfo is optional only. If Binance blocks REST from a cloud IP,
   // the game still runs and validates symbols with a safe USDT suffix pattern.
   try {
-    log('api', 'V12 10-minute leverage sprint mode: optional exchangeInfo validation starting. REST is not used for scans.');
+    log('api', 'V13 Quant Proof access-control mode: optional exchangeInfo validation starting. REST is not used for scans.');
     const data = await binanceJson('/fapi/v1/exchangeInfo');
     const symbols = Array.isArray(data.symbols) ? data.symbols : [];
     validSymbols = new Set(
@@ -2172,7 +2387,7 @@ async function normalizeConfig(raw) {
       const before = symbols;
       symbols = before.filter(s => /^[A-Z0-9]{2,30}USDT$/.test(s));
       rejected.push(...before.filter(s => !/^[A-Z0-9]{2,30}USDT$/.test(s)));
-      warnings.push('REST symbol validation unavailable; V12 is using safe USDT symbol format checks and Binance WebSocket streams.');
+      warnings.push('REST symbol validation unavailable; V13 is using safe USDT symbol format checks and Binance WebSocket streams.');
     }
 
     if (symbols.length === 0) {
@@ -2533,6 +2748,6 @@ app.listen(PORT, () => {
     running = true;
     scheduleNextScan(9000);
   }
-  log('server', `Whale Hunter Radar 10-Min Leverage Sprint Scientists V12 online on port ${PORT}. Server-side autonomous 10-minute fake-leverage sprint: 500 bots, $1000 fake each, ALL Binance WebSocket mode. Page is viewer only. Monitoring only. No API keys. No real trading.`);
+  log('server', `Whale Hunter Quant Proof Scientists V13 online on port ${PORT}. Server-side autonomous quant-proof fake-leverage sprint: 500 bots, $1000 fake each, ALL Binance WebSocket mode. Page is viewer only. Monitoring only. No API keys. No real trading.`);
   broadcast('status', { running, scanning, autostart: AUTOSTART, timestamp: Date.now() });
 });

@@ -1,7 +1,7 @@
 {
-  "name": "whale-hunter-radar",
-  "version": "12.0.0",
-  "description": "Game-first iPad PWA for Binance USD-M Futures whale-flow monitoring with 500 living scientist bots in a 10-minute max-profit fake-leverage sprint with live equations, velocity scoring, and paper liquidation logic. Fake money only, no trading.",
+  "name": "whale-hunter-quant-proof",
+  "version": "13.0.0",
+  "description": "Whale Hunter Quant Proof V13: iPad PWA game lab with 500 scientist bots, paper-only leverage sprint, strict perfect-so-far pattern proof, role-based dashboard access, Binance Futures public WebSocket market data only.",
   "type": "module",
   "main": "server.mjs",
   "scripts": {
@@ -23,23 +23,13 @@
     "radar",
     "monitoring",
     "game",
-    "prediction-arena",
-    "autonomous-bots",
-    "bot-arena",
-    "robot-swarm",
-    "hive-mind",
     "paper-trading-simulation",
     "fake-money",
-    "learning-bots",
     "scientist-bots",
     "mathematical-learning",
-    "collective-intelligence",
-    "live-formulas",
-    "living-hive",
-    "micro-learning",
-    "fake-leverage",
-    "ten-minute-sprint"
+    "perfect-pattern",
+    "access-control",
+    "dashboard-permissions"
   ],
-  "author": "",
   "license": "MIT"
 }
