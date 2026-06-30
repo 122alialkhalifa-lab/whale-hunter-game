@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import WebSocket from 'ws';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,18 +11,21 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 const BINANCE_BASE = 'https://fapi.binance.com';
-const MAX_SYMBOLS = Number(process.env.MAX_SYMBOLS || 35);
+const BINANCE_WS_STREAM_BASE = 'wss://fstream.binance.com/market/stream?streams=';
+const BINANCE_WS_DISCOVERY_URL = 'wss://fstream.binance.com/market/ws/!miniTicker@arr';
+const ALL_SYMBOLS_SENTINEL = 'ALL_BINANCE_USDT';
+const MAX_SYMBOLS = Number(process.env.MAX_SYMBOLS || 900);
+const WS_SUBSCRIBE_CHUNK = Number(process.env.WS_SUBSCRIBE_CHUNK || 180);
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 9000);
-const SYMBOL_DELAY_MS = Number(process.env.SYMBOL_DELAY_MS || 140);
+const SYMBOL_DELAY_MS = Number(process.env.SYMBOL_DELAY_MS || 20);
+const TRADE_BUFFER_MAX_MS = Number(process.env.TRADE_BUFFER_MAX_MS || 900000);
+const WS_RECONNECT_MS = Number(process.env.WS_RECONNECT_MS || 5000);
 const CONTESTANT_COUNT = 500;
 const BOT_TICK_MS = Number(process.env.BOT_TICK_MS || 1100);
 
 const defaultConfig = Object.freeze({
-  symbols: [
-    'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT',
-    'LINKUSDT', 'AVAXUSDT', 'SUIUSDT', 'ONDOUSDT', 'VETUSDT',
-    'HBARUSDT', 'PEPEUSDT', 'WIFUSDT'
-  ],
+  // ALL_BINANCE_USDT = automatic all Binance USDⓈ-M Futures USDT symbols via WebSocket discovery.
+  symbols: [ALL_SYMBOLS_SENTINEL],
   whaleUsd: 30000,
   minScore: 70,
   windowSec: 60,
@@ -62,6 +66,19 @@ let exchangeInfoLoadedAt = null;
 let sseClients = new Set();
 let logBuffer = [];
 let currentPrices = new Map();
+let tradeBuffers = new Map();
+let wsState = {
+  ws: null,
+  key: '',
+  mode: 'idle',
+  connected: false,
+  lastMessageAt: null,
+  reconnectTimer: null,
+  url: null,
+  subscribedSymbols: new Set(),
+  discoveredSymbols: new Set(),
+  pendingSubscribe: []
+};
 let resolvedPredictions = [];
 let activePredictions = [];
 let botTimer = null;
@@ -101,7 +118,19 @@ app.get('/health', (_req, res) => {
     botSwarm: getBotSwarm(),
     exchangeInfoLoadedAt,
     validSymbolCount: validSymbols.size,
-    lastScanAt: lastScan?.timestamp ?? null
+    lastScanAt: lastScan?.timestamp ?? null,
+    marketDataMode: isAllSymbolsRequest(config.symbols) ? 'websocket-all-binance-usdt' : 'websocket-selected-symbols',
+    allSymbolsMode: isAllSymbolsRequest(config.symbols),
+    activeSymbolCount: getScanSymbols(config).length,
+    websocket: {
+      connected: wsState.connected,
+      mode: wsState.mode,
+      symbolsKey: wsState.key,
+      lastMessageAt: wsState.lastMessageAt,
+      discoveredSymbols: wsState.discoveredSymbols.size,
+      subscribedSymbols: wsState.subscribedSymbols.size,
+      maxSymbols: MAX_SYMBOLS
+    }
   });
 });
 
@@ -153,7 +182,8 @@ app.post('/config', async (req, res) => {
   const incoming = req.body || {};
   const normalized = await normalizeConfig({ ...config, ...incoming });
   config = normalized.config;
-  log('loadout', `Loadout saved: ${config.symbols.length} symbols, whale $${formatUsd(config.whaleUsd)}, minScore ${config.minScore}, arena ${formatDuration(config.arenaHorizonSec)}.`);
+  ensureTradeStreams(config.symbols);
+  log('loadout', `Loadout saved: ${describeLoadout(config)}, whale $${formatUsd(config.whaleUsd)}, minScore ${config.minScore}, arena ${formatDuration(config.arenaHorizonSec)}.`);
   broadcast('config', { config, rejected: normalized.rejected, warnings: normalized.warnings, timestamp: Date.now() });
   if (running) scheduleNextScan(100);
   res.json({ ok: true, config, rejected: normalized.rejected, warnings: normalized.warnings });
@@ -162,6 +192,7 @@ app.post('/config', async (req, res) => {
 app.post('/start', async (_req, res) => {
   if (!running) {
     running = true;
+    ensureTradeStreams(config.symbols);
     scheduleNextScan(100);
     log('engine', `Hunt started. Scan interval: ${config.intervalSec}s. Arena horizon: ${formatDuration(config.arenaHorizonSec)}.`);
     broadcast('status', { running, scanning, timestamp: Date.now() });
@@ -207,13 +238,37 @@ async function runScan({ manual = false } = {}) {
   scanning = true;
   const startedAt = Date.now();
   const cfg = structuredClone(config);
+  const scanSymbols = getScanSymbols(cfg);
   const results = [];
   const errors = [];
 
-  broadcast('scan-start', { timestamp: startedAt, manual, symbols: cfg.symbols });
-  log('scanner', `${manual ? 'Manual scan' : 'Auto scan'} launched for ${cfg.symbols.length} sectors.`);
+  broadcast('scan-start', { timestamp: startedAt, manual, symbols: scanSymbols, allSymbolsMode: isAllSymbolsRequest(cfg.symbols) });
+  log('scanner', `${manual ? 'Manual scan' : 'Auto scan'} launched for ${scanSymbols.length} sector(s)${isAllSymbolsRequest(cfg.symbols) ? ' in ALL BINANCE mode' : ''}.`);
 
-  for (const symbol of cfg.symbols) {
+  if (!scanSymbols.length) {
+    scanning = false;
+    const waiting = {
+      ok: true,
+      timestamp: Date.now(),
+      durationMs: Date.now() - startedAt,
+      manual,
+      running,
+      config: cfg,
+      results: [],
+      hotCount: 0,
+      top: null,
+      arena: getArenaSnapshot(),
+      errors: [],
+      message: 'Waiting for Binance WebSocket symbol discovery.'
+    };
+    lastScan = waiting;
+    log('scanner', 'Waiting for all-symbol WebSocket discovery. Try again in a few seconds.');
+    broadcast('scan', waiting);
+    broadcast('status', { running, scanning, timestamp: Date.now() });
+    return waiting;
+  }
+
+  for (const symbol of scanSymbols) {
     try {
       const signal = await scanSymbol(symbol, cfg);
       results.push(signal);
@@ -244,7 +299,7 @@ async function runScan({ manual = false } = {}) {
     durationMs: finishedAt - startedAt,
     manual,
     running,
-    config: cfg,
+    config: { ...cfg, activeSymbols: scanSymbols, activeSymbolCount: scanSymbols.length },
     results,
     hotCount: hot.length,
     top,
@@ -261,21 +316,11 @@ async function runScan({ manual = false } = {}) {
 }
 
 async function scanSymbol(symbol, cfg) {
-  const params = new URLSearchParams({ symbol, limit: '1000' });
-  const trades = await binanceJson(`/fapi/v1/aggTrades?${params}`);
-  if (!Array.isArray(trades)) throw new Error('Unexpected aggTrades response.');
-
   const now = Date.now();
   const cutoff = now - Number(cfg.windowSec) * 1000;
-  const recent = trades
-    .filter(t => Number(t.T) >= cutoff)
-    .map(t => ({
-      time: Number(t.T),
-      price: Number(t.p),
-      qty: Number(t.q),
-      buyerAggressive: t.m === false
-    }))
-    .filter(t => Number.isFinite(t.price) && Number.isFinite(t.qty) && t.price > 0 && t.qty > 0)
+  const buffer = tradeBuffers.get(symbol) || [];
+  const recent = buffer
+    .filter(t => Number(t.time) >= cutoff)
     .sort((a, b) => a.time - b.time);
 
   let buyUsd = 0;
@@ -307,8 +352,8 @@ async function scanSymbol(symbol, cfg) {
   }
 
   const totalFlow = buyUsd + sellUsd;
-  const firstPrice = recent[0]?.price ?? 0;
-  const lastPrice = recent.at(-1)?.price ?? 0;
+  const firstPrice = recent[0]?.price ?? currentPrices.get(symbol)?.price ?? 0;
+  const lastPrice = recent.at(-1)?.price ?? currentPrices.get(symbol)?.price ?? 0;
   const buyPct = totalFlow > 0 ? buyUsd / totalFlow : 0;
   const netWhale = bigBuyUsd - bigSellUsd;
   const priceChangePct = firstPrice > 0 ? ((lastPrice - firstPrice) / firstPrice) * 100 : 0;
@@ -346,9 +391,10 @@ async function scanSymbol(symbol, cfg) {
     whaleTradeCount,
     tradeCount: recent.length,
     absorption,
-    tags,
+    tags: recent.length ? tags : ['WAITING FOR STREAM'],
     timestamp: Date.now(),
-    note: score >= cfg.minScore ? 'possible whale footprint' : 'watch signal'
+    note: score >= cfg.minScore ? 'possible whale footprint' : 'watch signal',
+    source: 'Binance Futures WebSocket aggTrade stream'
   };
 }
 
@@ -971,8 +1017,11 @@ function getBotSwarm() {
 }
 
 async function initValidSymbols() {
+  // V6 uses Binance Futures WebSocket aggTrade streams for live market data.
+  // REST exchangeInfo is optional only. If Binance blocks REST from a cloud IP,
+  // the game still runs and validates symbols with a safe USDT suffix pattern.
   try {
-    log('api', 'Loading Binance USDⓈ-M Futures exchangeInfo for symbol validation.');
+    log('api', 'V6 WebSocket mode: optional exchangeInfo validation starting. REST is not used for scans.');
     const data = await binanceJson('/fapi/v1/exchangeInfo');
     const symbols = Array.isArray(data.symbols) ? data.symbols : [];
     validSymbols = new Set(
@@ -985,15 +1034,21 @@ async function initValidSymbols() {
     const normalized = await normalizeConfig(config);
     config = normalized.config;
 
-    log('api', `Validated ${validSymbols.size} Binance USDT perpetual symbols. Active loadout: ${config.symbols.length}.`);
+    log('api', `Validated ${validSymbols.size} Binance USDT perpetual symbols. Active loadout: ${describeLoadout(config)}.`);
     if (normalized.rejected.length) {
       log('loadout', `Rejected invalid/default symbols: ${normalized.rejected.join(', ')}`);
     }
+    ensureTradeStreams(config.symbols);
+    if (isAllSymbolsRequest(config.symbols)) subscribeAllKnownSymbols('exchangeInfo');
     broadcast('config', { config, rejected: normalized.rejected, warnings: normalized.warnings, timestamp: Date.now() });
   } catch (error) {
     validSymbols = new Set();
     exchangeInfoLoadedAt = null;
-    log('api-error', `exchangeInfo validation failed: ${error.message || error}. The server will retry on config save/startup restart.`);
+    log('api-error', `Optional exchangeInfo validation skipped: ${error.message || error}. V6 will continue with WebSocket data and USDT symbol format checks.`);
+    const normalized = await normalizeConfig(config);
+    config = normalized.config;
+    ensureTradeStreams(config.symbols);
+    broadcast('config', { config, rejected: normalized.rejected, warnings: normalized.warnings, timestamp: Date.now() });
   }
 }
 
@@ -1010,22 +1065,33 @@ async function normalizeConfig(raw) {
     .filter(Boolean)
   )];
 
-  if (symbols.length > MAX_SYMBOLS) {
-    warnings.push(`Symbol list trimmed to max ${MAX_SYMBOLS}.`);
-    symbols = symbols.slice(0, MAX_SYMBOLS);
-  }
+  if (!symbols.length) symbols = defaultConfig.symbols.slice();
 
-  if (validSymbols.size > 0) {
-    const before = symbols;
-    symbols = before.filter(s => validSymbols.has(s));
-    rejected.push(...before.filter(s => !validSymbols.has(s)));
+  const wantsAll = symbols.some(s => isAllSymbolToken(s));
+  if (wantsAll) {
+    symbols = [ALL_SYMBOLS_SENTINEL];
+    warnings.push(`ALL BINANCE mode enabled: the server will discover and subscribe to all active Binance USDⓈ-M USDT symbols by WebSocket, up to ${MAX_SYMBOLS}.`);
   } else {
-    warnings.push('Symbol validation is temporarily unavailable because exchangeInfo could not be loaded.');
-  }
+    if (symbols.length > MAX_SYMBOLS) {
+      warnings.push(`Symbol list trimmed to max ${MAX_SYMBOLS}.`);
+      symbols = symbols.slice(0, MAX_SYMBOLS);
+    }
 
-  if (symbols.length === 0) {
-    symbols = defaultConfig.symbols.slice(0, MAX_SYMBOLS);
-    warnings.push('No valid symbols supplied; fallback loadout restored.');
+    if (validSymbols.size > 0) {
+      const before = symbols;
+      symbols = before.filter(s => validSymbols.has(s));
+      rejected.push(...before.filter(s => !validSymbols.has(s)));
+    } else {
+      const before = symbols;
+      symbols = before.filter(s => /^[A-Z0-9]{2,30}USDT$/.test(s));
+      rejected.push(...before.filter(s => !/^[A-Z0-9]{2,30}USDT$/.test(s)));
+      warnings.push('REST symbol validation unavailable; V7 is using safe USDT symbol format checks and Binance WebSocket streams.');
+    }
+
+    if (symbols.length === 0) {
+      symbols = [ALL_SYMBOLS_SENTINEL];
+      warnings.push('No valid symbols supplied; ALL BINANCE mode restored.');
+    }
   }
 
   const whaleUsd = clampNumber(raw.whaleUsd, 100, 10000000, defaultConfig.whaleUsd);
@@ -1046,6 +1112,242 @@ async function normalizeConfig(raw) {
     rejected,
     warnings
   };
+}
+
+function isAllSymbolToken(token) {
+  const s = String(token || '').trim().toUpperCase();
+  return s === ALL_SYMBOLS_SENTINEL || s === 'ALL' || s === 'ALLUSDT' || s === 'ALL_BINANCE' || s === 'ALL_BINANCE_FUTURES' || s === '*' || s === 'AUTO';
+}
+
+function isAllSymbolsRequest(symbols) {
+  return (Array.isArray(symbols) ? symbols : [symbols]).some(isAllSymbolToken);
+}
+
+function describeLoadout(cfg = config) {
+  if (isAllSymbolsRequest(cfg.symbols)) {
+    const active = getScanSymbols(cfg).length;
+    return `ALL BINANCE USDT Futures mode (${active || 'discovering'} active, cap ${MAX_SYMBOLS})`;
+  }
+  return `${(cfg.symbols || []).length} symbols`;
+}
+
+function getScanSymbols(cfg = config) {
+  if (isAllSymbolsRequest(cfg.symbols)) {
+    const preferred = [...wsState.subscribedSymbols].filter(s => tradeBuffers.has(s));
+    const fallback = [...wsState.discoveredSymbols].filter(s => tradeBuffers.has(s));
+    const source = preferred.length ? preferred : fallback;
+    return source.filter(s => /^[A-Z0-9]{2,30}USDT$/.test(s)).sort().slice(0, MAX_SYMBOLS);
+  }
+  return [...new Set((cfg.symbols || [])
+    .map(s => String(s || '').trim().toUpperCase())
+    .filter(s => /^[A-Z0-9]{2,30}USDT$/.test(s))
+  )].slice(0, MAX_SYMBOLS);
+}
+
+function ensureTradeStreams(symbols) {
+  const wantsAll = isAllSymbolsRequest(symbols);
+  if (wantsAll) return ensureAllBinanceTradeStreams();
+
+  const clean = [...new Set((symbols || [])
+    .map(s => String(s || '').trim().toUpperCase())
+    .filter(s => /^[A-Z0-9]{2,30}USDT$/.test(s))
+  )].slice(0, MAX_SYMBOLS);
+  const key = clean.join(',');
+  if (!clean.length) return;
+  if (wsState.key === key && wsState.mode === 'selected' && (wsState.connected || wsState.ws)) return;
+
+  closeTradeStream();
+  wsState.key = key;
+  wsState.mode = 'selected';
+  wsState.subscribedSymbols = new Set(clean);
+  wsState.discoveredSymbols = new Set(clean);
+  for (const symbol of clean) {
+    if (!tradeBuffers.has(symbol)) tradeBuffers.set(symbol, []);
+  }
+
+  const streams = clean.map(symbol => `${symbol.toLowerCase()}@aggTrade`).join('/');
+  const url = `${BINANCE_WS_STREAM_BASE}${streams}`;
+  wsState.url = url;
+  openBinanceSocket(url, clean, 'selected');
+}
+
+function ensureAllBinanceTradeStreams() {
+  const key = ALL_SYMBOLS_SENTINEL;
+  if (wsState.key === key && wsState.mode === 'all' && (wsState.connected || wsState.ws)) return;
+
+  closeTradeStream();
+  wsState.key = key;
+  wsState.mode = 'all';
+  wsState.subscribedSymbols = new Set();
+  wsState.discoveredSymbols = new Set();
+  wsState.pendingSubscribe = [];
+  wsState.url = BINANCE_WS_DISCOVERY_URL;
+  openBinanceSocket(BINANCE_WS_DISCOVERY_URL, [ALL_SYMBOLS_SENTINEL], 'all');
+}
+
+function openBinanceSocket(url, labelSymbols, mode) {
+  const ws = new WebSocket(url, {
+    handshakeTimeout: REQUEST_TIMEOUT_MS,
+    headers: { 'User-Agent': 'WhaleHunterRadar/7.0 websocket-all-symbols-monitoring-only' }
+  });
+  wsState.ws = ws;
+  wsState.connected = false;
+
+  ws.on('open', () => {
+    wsState.connected = true;
+    wsState.lastMessageAt = Date.now();
+    if (mode === 'all') {
+      log('stream', `ALL BINANCE mode online. Discovering USDT Futures symbols from !miniTicker@arr, then subscribing to aggTrade streams up to ${MAX_SYMBOLS}.`);
+      if (validSymbols.size) subscribeAllKnownSymbols('exchangeInfo-ready');
+    } else {
+      log('stream', `Binance Futures WebSocket connected for ${labelSymbols.length} selected symbol(s).`);
+    }
+    broadcast('stream', {
+      connected: true,
+      mode,
+      symbols: mode === 'all' ? [ALL_SYMBOLS_SENTINEL] : labelSymbols,
+      activeSymbolCount: getScanSymbols(config).length,
+      subscribedSymbols: wsState.subscribedSymbols.size,
+      discoveredSymbols: wsState.discoveredSymbols.size,
+      timestamp: Date.now()
+    });
+  });
+
+  ws.on('message', data => {
+    try {
+      const packet = JSON.parse(String(data));
+      const event = packet.data || packet;
+      if (Array.isArray(event)) return ingestMiniTickerArray(event);
+      if (event?.e === '24hrMiniTicker') return ingestMiniTickerArray([event]);
+      if (event?.e === 'aggTrade') return ingestAggTrade(event);
+      if (event?.result === null) return;
+      if (event?.code || event?.msg) log('api-error', `WebSocket control message: ${JSON.stringify(event).slice(0, 240)}`);
+    } catch (error) {
+      log('api-error', `WebSocket message parse failed: ${error.message || error}`);
+    }
+  });
+
+  ws.on('close', (code, reason) => {
+    const wasCurrent = wsState.ws === ws;
+    if (!wasCurrent) return;
+    wsState.ws = null;
+    wsState.connected = false;
+    log('stream', `Binance WebSocket closed (${code}). Reconnecting soon. ${reason ? String(reason) : ''}`.trim());
+    broadcast('stream', { connected: false, mode: wsState.mode, code, timestamp: Date.now() });
+    scheduleStreamReconnect(mode === 'all' ? [ALL_SYMBOLS_SENTINEL] : labelSymbols);
+  });
+
+  ws.on('error', error => {
+    log('api-error', `Binance WebSocket error: ${error.message || error}`);
+    broadcast('stream-error', { message: error.message || String(error), mode: wsState.mode, timestamp: Date.now() });
+  });
+}
+
+function closeTradeStream() {
+  if (wsState.reconnectTimer) clearTimeout(wsState.reconnectTimer);
+  wsState.reconnectTimer = null;
+  if (wsState.ws) {
+    try { wsState.ws.close(1000, 'loadout change'); } catch {}
+  }
+  wsState.ws = null;
+  wsState.connected = false;
+}
+
+function scheduleStreamReconnect(symbols) {
+  if (wsState.reconnectTimer) clearTimeout(wsState.reconnectTimer);
+  wsState.reconnectTimer = setTimeout(() => {
+    wsState.ws = null;
+    wsState.connected = false;
+    wsState.key = '';
+    ensureTradeStreams(isAllSymbolsRequest(symbols) ? [ALL_SYMBOLS_SENTINEL] : (config.symbols || symbols));
+  }, WS_RECONNECT_MS);
+}
+
+function ingestMiniTickerArray(items) {
+  if (!Array.isArray(items) || wsState.mode !== 'all') return;
+  const candidates = [];
+  for (const item of items) {
+    const symbol = String(item.s || '').toUpperCase();
+    if (!/^[A-Z0-9]{2,30}USDT$/.test(symbol)) continue;
+    if (validSymbols.size && !validSymbols.has(symbol)) continue;
+    wsState.discoveredSymbols.add(symbol);
+    const price = Number(item.c || item.p || item.w || 0);
+    if (Number.isFinite(price) && price > 0) currentPrices.set(symbol, { price, timestamp: Number(item.E || Date.now()) });
+    candidates.push(symbol);
+  }
+  if (candidates.length) subscribeAggTradeSymbols(candidates, 'miniTicker-discovery');
+}
+
+function subscribeAllKnownSymbols(reason = 'all-known') {
+  if (!wsState.ws || wsState.ws.readyState !== WebSocket.OPEN || wsState.mode !== 'all') return;
+  const source = validSymbols.size ? [...validSymbols] : [...wsState.discoveredSymbols];
+  subscribeAggTradeSymbols(source, reason);
+}
+
+function subscribeAggTradeSymbols(symbols, reason = 'subscribe') {
+  if (!wsState.ws || wsState.ws.readyState !== WebSocket.OPEN) return;
+  const clean = [...new Set((symbols || [])
+    .map(s => String(s || '').trim().toUpperCase())
+    .filter(s => /^[A-Z0-9]{2,30}USDT$/.test(s))
+  )]
+    .filter(s => !wsState.subscribedSymbols.has(s))
+    .slice(0, Math.max(0, MAX_SYMBOLS - wsState.subscribedSymbols.size));
+
+  if (!clean.length) return;
+  for (const symbol of clean) {
+    wsState.subscribedSymbols.add(symbol);
+    wsState.discoveredSymbols.add(symbol);
+    if (!tradeBuffers.has(symbol)) tradeBuffers.set(symbol, []);
+  }
+
+  const streams = clean.map(symbol => `${symbol.toLowerCase()}@aggTrade`);
+  const chunks = [];
+  for (let i = 0; i < streams.length; i += WS_SUBSCRIBE_CHUNK) chunks.push(streams.slice(i, i + WS_SUBSCRIBE_CHUNK));
+
+  chunks.forEach((chunk, index) => {
+    setTimeout(() => {
+      if (!wsState.ws || wsState.ws.readyState !== WebSocket.OPEN) return;
+      try {
+        wsState.ws.send(JSON.stringify({ method: 'SUBSCRIBE', params: chunk, id: Date.now() % 1000000000 + index }));
+      } catch (error) {
+        log('api-error', `WebSocket subscribe failed: ${error.message || error}`);
+      }
+    }, index * 180);
+  });
+
+  log('stream', `Subscribed ${clean.length} aggTrade stream(s) from ${reason}. Active all-symbol coverage: ${wsState.subscribedSymbols.size}/${MAX_SYMBOLS}.`);
+  broadcast('stream', {
+    connected: wsState.connected,
+    mode: wsState.mode,
+    activeSymbolCount: getScanSymbols(config).length,
+    subscribedSymbols: wsState.subscribedSymbols.size,
+    discoveredSymbols: wsState.discoveredSymbols.size,
+    timestamp: Date.now()
+  });
+}
+
+function ingestAggTrade(event) {
+  const symbol = String(event.s || '').toUpperCase();
+  if (!symbol) return;
+  const price = Number(event.p);
+  const qty = Number(event.q);
+  const time = Number(event.T || event.E || Date.now());
+  if (!Number.isFinite(price) || !Number.isFinite(qty) || price <= 0 || qty <= 0) return;
+
+  const trade = {
+    time,
+    price,
+    qty,
+    buyerAggressive: event.m === false
+  };
+  const buffer = tradeBuffers.get(symbol) || [];
+  buffer.push(trade);
+  const cutoff = Date.now() - TRADE_BUFFER_MAX_MS;
+  while (buffer.length && buffer[0].time < cutoff) buffer.shift();
+  tradeBuffers.set(symbol, buffer);
+  currentPrices.set(symbol, { price, timestamp: time });
+  wsState.discoveredSymbols.add(symbol);
+  wsState.lastMessageAt = Date.now();
 }
 
 async function binanceJson(pathname) {
@@ -1134,6 +1436,7 @@ function formatDuration(seconds) {
 
 app.listen(PORT, () => {
   startBotLoop();
-  log('server', `Whale Hunter Radar Bot Arena online on port ${PORT}. 500 autonomous robot contestants. Monitoring only. No API keys. No trading.`);
+  log('server', `Whale Hunter Radar Bot Arena V7 online on port ${PORT}. ALL BINANCE WebSocket mode. 500 autonomous robot contestants. Monitoring only. No API keys. No trading.`);
+  ensureTradeStreams(config.symbols);
   initValidSymbols();
 });

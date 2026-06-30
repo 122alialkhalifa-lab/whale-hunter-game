@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="WhaleHunter" />
-  <title>Whale Hunter Radar — Autonomous Bot Arena</title>
+  <title>Whale Hunter Radar — All Binance Bot Arena</title>
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   <style>
@@ -1160,9 +1160,9 @@
     <section class="top-grid">
       <div class="hud-panel">
         <div>
-          <div class="eyebrow">AUTONOMOUS BOT ARENA • PUBLIC DATA • NO API KEYS • NO TRADING</div>
+          <div class="eyebrow">ALL BINANCE FUTURES • PUBLIC DATA • NO API KEYS • NO TRADING</div>
           <h1>لعبة صيد الحيتان</h1>
-          <p class="subtitle">تحوّل تدفق Binance Futures إلى لعبة رادار فيها 500 روبوت صيّاد يتحركون تلقائيًا، كل واحد يقرأ مؤشره ويتجه نحو الإشارة التي يثق فيها — مراقبة فقط بدون تنفيذ صفقات.</p>
+          <p class="subtitle">تحوّل تدفق كل عملات Binance Futures USDT إلى لعبة رادار فيها 500 روبوت صيّاد يتحركون تلقائيًا، كل واحد يقرأ مؤشره ويتجه نحو الإشارة التي يثق فيها — مراقبة فقط بدون تنفيذ صفقات.</p>
           <div class="safety">مراقبة فقط. ليست توصية مالية. الرافعة قد تصفّر الحساب.</div>
         </div>
         <div class="game-meta">
@@ -1317,7 +1317,7 @@
 
   <script>
     const defaultConfig = {
-      symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "LINKUSDT", "AVAXUSDT", "SUIUSDT", "ONDOUSDT", "VETUSDT", "HBARUSDT", "PEPEUSDT", "WIFUSDT"],
+      symbols: ["ALL_BINANCE_USDT"],
       whaleUsd: 30000,
       minScore: 70,
       windowSec: 60,
@@ -1649,11 +1649,13 @@
 
     function renderSignals(signals) {
       if (!signals.length) {
-        els.signals.innerHTML = `<div class="empty">اضغط SONAR PULSE أو START HUNT لبدء اللعبة.<br>الرادار سيحوّل نتائج المراقبة إلى Targets، Ranks، Boss Whale وXP — بدون تداول.</div>`;
+        els.signals.innerHTML = `<div class="empty">اضغط SONAR PULSE أو START HUNT لبدء لعبة كل عملات Binance.<br>الرادار سيحوّل نتائج المراقبة إلى Targets، Ranks، Boss Whale وXP — بدون تداول.</div>`;
         return;
       }
 
-      els.signals.innerHTML = signals.map(signal => {
+      const viewSignals = signals.slice(0, 80);
+      const clippedNote = signals.length > viewSignals.length ? `<div class="empty">يتم مراقبة ${signals.length} عملة، ويُعرض أقوى ${viewSignals.length} هدف فقط حتى يبقى الآيباد سريع.</div>` : '';
+      els.signals.innerHTML = clippedNote + viewSignals.map(signal => {
         const rank = tier(signal.score);
         const isBoss = signal.hot && signal.score >= 90;
         const tags = signal.tags?.length ? [...signal.tags] : ['WATCH SIGNAL'];

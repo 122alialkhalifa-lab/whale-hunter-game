@@ -1,20 +1,12 @@
-# Whale Hunter Radar — Autonomous Bot Arena V4
+# Whale Hunter Radar — Autonomous Bot Arena V7
 
-لعبة مراقبة حيتان بأسلوب Game HUD للآيباد، مبنية على Node.js backend وواجهة PWA.
+نسخة iPad Easy + All Binance Mode.
 
-## الفكرة
-
-هذه النسخة تجعل البطولة **روبوتات آلية بالكامل** وليست لاعبين بشر:
-
-- 500 Bot متسابق داخل الرادار.
-- كل Bot له مدرسة قراءة مختلفة: Big Buy، Buy Imbalance، Absorption، Net Whale، Sell Pressure، Momentum، Range Compression وغيرها.
-- الروبوتات تتحرك تلقائيًا على الرادار كل ثانية تقريبًا عبر SSE `bot-tick`.
-- إذا قرأ Bot إشارة شراء، يتحرك نحو الهدف كـ `CHASING` أو `BOSS_RUSH`.
-- إذا قرأ ضغط بيع، يتحول إلى `RED_TIDE`.
-- إذا لم يجد قراءة واضحة، يدور حول الهدف أو يعمل `SCOUTING / PATROL`.
-- بعد مدة التوقع، اللعبة تقارن سعر البداية بسعر التقييم وتمنح XP للروبوتات حسب دقة القراءة.
-
-هذه لعبة مراقبة وتقييم قراءة فقط. لا توجد صفقات، ولا أوامر، ولا API keys.
+- تراقب كل رموز Binance USDⓈ-M Futures التي تنتهي بـ USDT عبر WebSocket.
+- لا تستخدم REST scans لكل عملة، لتقليل أخطاء 418.
+- تدعم `ALL_BINANCE_USDT` في خانة Symbols.
+- 500 روبوت Bot يتحركون تلقائيًا داخل الرادار.
+- مراقبة فقط: لا تداول، لا API keys، لا شراء، لا بيع.
 
 ## التشغيل
 
@@ -29,56 +21,26 @@ npm start
 http://localhost:3000
 ```
 
-من الآيباد افتح الرابط من Safari ثم Share ثم Add to Home Screen.
+## Render Build Command
 
-## الملفات
-
-```text
-package.json
-server.mjs
-public/index.html
-public/manifest.json
-public/sw.js
-public/icon.svg
+```bash
+rm -f package-lock.json && npm install --registry=https://registry.npmjs.org/
 ```
 
-## Backend endpoints
+## Render Start Command
 
-- `GET /` — الواجهة.
-- `GET /events` — Server-Sent Events، ومنها أحداث `scan`, `arena`, `bot-tick`.
-- `POST /config` — حفظ الإعدادات.
-- `POST /start` — بدء الصيد المتكرر.
-- `POST /stop` — إيقاف الصيد.
-- `POST /scan` — Sonar Pulse فوري.
-- `GET /health` — صحة السيرفر + حالة الروبوتات.
-- `GET /arena` — حالة بطولة الـ 500 Bot.
-- `POST /arena/reset` — إعادة ضبط البطولة داخل الذاكرة.
+```bash
+node server.mjs
+```
 
-## Binance data
+## ملاحظة
 
-السيرفر فقط يتصل بـ Binance public endpoints. المتصفح/الآيباد لا يتصل مباشرة بـ Binance.
+إذا كتبت في Symbols:
 
-- `GET /fapi/v1/exchangeInfo`
-- `GET /fapi/v1/aggTrades?symbol=SYMBOL&limit=1000`
+```text
+ALL_BINANCE_USDT
+```
 
-لا يحتاج API key.
+السيرفر يكتشف رموز Binance Futures USDT تلقائيًا من WebSocket `!miniTicker@arr` ثم يشترك في `@aggTrade` لها.
 
-## Safety
-
-- Monitoring only.
-- No trading.
-- No auto-buy.
-- No auto-sell.
-- No Binance API keys.
-- No guaranteed profit claims.
-
-الرسالة الظاهرة في التطبيق:
-
-> مراقبة فقط. ليست توصية مالية. الرافعة قد تصفّر الحساب.
-
-الإشارات داخل التطبيق تعني:
-
-- possible whale footprint
-- watch signal
-
-ولا تعني دخول مضمون أو توصية مالية.
+الإشارات تعني possible whale footprint / watch signal فقط. ليست توصية مالية. الرافعة قد تصفّر الحساب.
