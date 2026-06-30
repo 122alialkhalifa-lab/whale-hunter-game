@@ -21,6 +21,10 @@ const SYMBOL_DELAY_MS = Number(process.env.SYMBOL_DELAY_MS || 20);
 const TRADE_BUFFER_MAX_MS = Number(process.env.TRADE_BUFFER_MAX_MS || 900000);
 const WS_RECONNECT_MS = Number(process.env.WS_RECONNECT_MS || 5000);
 const CONTESTANT_COUNT = 500;
+const INITIAL_FAKE_USD = Number(process.env.INITIAL_FAKE_USD || 1000);
+const PAPER_FEE_BPS = Number(process.env.PAPER_FEE_BPS || 4);
+const MAX_PAPER_RISK = Number(process.env.MAX_PAPER_RISK || 0.34);
+const LESSON_LOOKBACK_MS = Number(process.env.LESSON_LOOKBACK_MS || 180000);
 const BOT_TICK_MS = Number(process.env.BOT_TICK_MS || 1100);
 
 const defaultConfig = Object.freeze({
@@ -84,6 +88,9 @@ let activePredictions = [];
 let botTimer = null;
 let lastBotTickAt = Date.now();
 const contestants = createContestants(CONTESTANT_COUNT);
+const hiveMemory = createHiveMemory();
+let symbolSnapshots = new Map();
+let lastLessonAt = new Map();
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '96kb' }));
@@ -116,6 +123,7 @@ app.get('/health', (_req, res) => {
     config,
     arena: getArenaSnapshot(),
     botSwarm: getBotSwarm(),
+    hive: getHiveSnapshot(),
     exchangeInfoLoadedAt,
     validSymbolCount: validSymbols.size,
     lastScanAt: lastScan?.timestamp ?? null,
@@ -136,7 +144,11 @@ app.get('/health', (_req, res) => {
 
 app.get('/arena', (_req, res) => {
   const arena = getArenaSnapshot();
-  res.json({ ok: true, arena, botSwarm: arena.botSwarm });
+  res.json({ ok: true, arena, botSwarm: arena.botSwarm, hive: arena.hive });
+});
+
+app.get('/hive', (_req, res) => {
+  res.json({ ok: true, hive: getHiveSnapshot(), timestamp: Date.now() });
 });
 
 app.post('/arena/reset', (_req, res) => {
@@ -164,6 +176,7 @@ app.get('/events', (req, res) => {
     timestamp: Date.now(),
     config,
     arena: getArenaSnapshot(),
+    hive: getHiveSnapshot(),
     lastScan,
     logs: logBuffer.slice(-30)
   });
@@ -290,6 +303,7 @@ async function runScan({ manual = false } = {}) {
   results.sort((a, b) => b.score - a.score || b.buyUsd - a.buyUsd);
   const hot = results.filter(item => item.hot);
   const top = results[0]?.symbol || null;
+  updateCoinMemory(results, Date.now(), cfg);
   const arena = updateArena(results, cfg, Date.now());
   const finishedAt = Date.now();
 
@@ -304,6 +318,7 @@ async function runScan({ manual = false } = {}) {
     hotCount: hot.length,
     top,
     arena,
+    hive: getHiveSnapshot(),
     errors
   };
 
@@ -392,6 +407,7 @@ async function scanSymbol(symbol, cfg) {
     tradeCount: recent.length,
     absorption,
     tags: recent.length ? tags : ['WAITING FOR STREAM'],
+    explanation: explainSignalStory({ symbol, score, buyUsd, sellUsd, totalFlow, buyPct, netWhale, priceChangePct, priceRangePct, bigBuyUsd, bigSellUsd, whaleTradeCount, absorption, tags }),
     timestamp: Date.now(),
     note: score >= cfg.minScore ? 'possible whale footprint' : 'watch signal',
     source: 'Binance Futures WebSocket aggTrade stream'
@@ -470,8 +486,12 @@ function createPrediction(contestant, results, cfg, now) {
     basis: reading.basis,
     signalScore: signal.score,
     signalTags: signal.tags || [],
+    signalSnapshot: signalFeatureSnapshot(signal),
+    hiveContext: reading.hiveContext || null,
+    paperTrade: null,
     status: 'OPEN'
   };
+  prediction.paperTrade = openPaperTrade(contestant, prediction, signal, now);
   contestant.lastPrediction = prediction;
   assignBotTarget(contestant, signal, prediction, now);
   return prediction;
@@ -601,9 +621,12 @@ function readSignal(contestant, signal, cfg) {
   }
 
   conviction += variant * 2.2 + contestant.risk * 0.8;
+  const hiveContext = getSharedHiveBoost(contestant, signal, direction);
+  conviction += hiveContext.boost;
+  if (hiveContext.note) basis += ` | Hive ${hiveContext.note}`;
   conviction = clamp(Math.round(conviction), 1, 100);
   if (conviction < contestant.minConviction) direction = 'WATCH';
-  return { conviction, direction, basis };
+  return { conviction, direction, basis, hiveContext };
 }
 
 function resolvePrediction(prediction, exitPrice, now, signal) {
@@ -620,6 +643,9 @@ function resolvePrediction(prediction, exitPrice, now, signal) {
   const moveBonus = hit ? Math.round(Math.min(32, Math.abs(movePct) * 8)) : -Math.round(Math.min(10, Math.abs(movePct) * 2));
   const confidenceBonus = hit ? Math.round(prediction.conviction / 14) : -Math.round(Math.max(0, prediction.conviction - 70) / 18);
   const scoreDelta = base + moveBonus + confidenceBonus;
+  const paperResult = closePaperTrade(contestant, prediction, exitPrice, now);
+  const selfReview = analyzeOutcome(contestant, prediction, { hit, movePct, scoreDelta, paperResult }, signal);
+  recordHiveOutcome(contestant, prediction, { hit, movePct, scoreDelta, paperResult, selfReview }, signal);
 
   contestant.xp = Math.max(0, contestant.xp + scoreDelta);
   contestant.pending = Math.max(0, contestant.pending - 1);
@@ -646,6 +672,8 @@ function resolvePrediction(prediction, exitPrice, now, signal) {
     movePct,
     hit,
     scoreDelta,
+    paperResult,
+    selfReview,
     resolvedAt: now,
     resolvedSignalScore: signal?.score ?? null,
     resolvedSignalTags: signal?.tags ?? []
@@ -671,7 +699,13 @@ function getArenaSnapshot(extra = {}) {
       lastResult: contestant.lastResult,
       lastSymbol: contestant.lastSymbol,
       lastDirection: contestant.lastDirection,
-      lastMovePct: contestant.lastMovePct
+      lastMovePct: contestant.lastMovePct,
+      fakeCash: Number(contestant.cash.toFixed(2)),
+      fakeEquity: Number(computeEquity(contestant).toFixed(2)),
+      fakePnl: Number((computeEquity(contestant) - INITIAL_FAKE_USD).toFixed(2)),
+      openPosition: contestant.position ? { symbol: contestant.position.symbol, side: contestant.position.side, entryPrice: contestant.position.entryPrice, notional: contestant.position.notional } : null,
+      learningMood: contestant.learning?.mood || 'OBSERVING',
+      lastAnalysis: contestant.learning?.lastAnalysis || null
     }))
     .sort((a, b) => b.xp - a.xp || b.accuracy - a.accuracy || b.wins - a.wins || a.id - b.id);
 
@@ -698,6 +732,7 @@ function getArenaSnapshot(extra = {}) {
     recentResolved,
     styleBoard,
     botSwarm: getBotSwarm(),
+    hive: getHiveSnapshot(),
     createdThisScan: (extra.createdThisScan || []).slice(0, 20),
     resolvedThisScan: (extra.resolvedThisScan || []).slice(0, 20)
   };
@@ -715,18 +750,21 @@ function buildStyleBoard() {
       racers: 0,
       xp: 0,
       wins: 0,
-      games: 0
+      games: 0,
+      fakePnl: 0
     };
     group.racers += 1;
     group.xp += contestant.xp;
     group.wins += contestant.wins;
     group.games += contestant.games;
+    group.fakePnl += computeEquity(contestant) - INITIAL_FAKE_USD;
     groups.set(key, group);
   }
   return [...groups.values()]
     .map(group => ({
       ...group,
       avgXp: group.racers ? group.xp / group.racers : 0,
+      avgFakePnl: group.racers ? group.fakePnl / group.racers : 0,
       accuracy: group.games ? group.wins / group.games : 0
     }))
     .sort((a, b) => b.avgXp - a.avgXp || b.accuracy - a.accuracy)
@@ -737,6 +775,9 @@ function resetArena() {
   activePredictions = [];
   resolvedPredictions = [];
   currentPrices = new Map();
+  symbolSnapshots = new Map();
+  lastLessonAt = new Map();
+  resetHiveMemory();
   for (const contestant of contestants) {
     contestant.xp = 0;
     contestant.wins = 0;
@@ -751,6 +792,11 @@ function resetArena() {
     contestant.lastDirection = null;
     contestant.lastPrediction = null;
     contestant.lastResolvedAt = null;
+    contestant.cash = INITIAL_FAKE_USD;
+    contestant.realizedPnl = 0;
+    contestant.position = null;
+    contestant.trades = 0;
+    contestant.learning = createLearningState(contestant.style);
     resetBotState(contestant, Date.now());
   }
 }
@@ -783,6 +829,11 @@ function createContestants(count) {
       lastDirection: null,
       lastPrediction: null,
       lastResolvedAt: null,
+      cash: INITIAL_FAKE_USD,
+      realizedPnl: 0,
+      position: null,
+      trades: 0,
+      learning: createLearningState(style),
       bot: createBotState(id, style)
     };
   });
@@ -1016,6 +1067,456 @@ function getBotSwarm() {
   };
 }
 
+
+function createLearningState(style) {
+  return {
+    confidence: 50,
+    mood: 'OBSERVING',
+    repeatRule: null,
+    avoidRule: null,
+    lastAnalysis: null,
+    winsByTag: {},
+    lossesByTag: {},
+    styleKey: style?.key || 'UNKNOWN'
+  };
+}
+
+function createHiveMemory() {
+  return {
+    startedAt: Date.now(),
+    lessons: [],
+    reviews: [],
+    broadcasts: [],
+    patternStats: new Map(),
+    symbolStats: new Map(),
+    totalResolved: 0,
+    totalPaperTrades: 0
+  };
+}
+
+function resetHiveMemory() {
+  hiveMemory.startedAt = Date.now();
+  hiveMemory.lessons = [];
+  hiveMemory.reviews = [];
+  hiveMemory.broadcasts = [];
+  hiveMemory.patternStats = new Map();
+  hiveMemory.symbolStats = new Map();
+  hiveMemory.totalResolved = 0;
+  hiveMemory.totalPaperTrades = 0;
+}
+
+function signalFeatureSnapshot(signal) {
+  return {
+    symbol: signal.symbol,
+    price: signal.price,
+    score: signal.score,
+    buyPct: signal.buyPct,
+    totalFlow: signal.totalFlow,
+    bigBuyUsd: signal.bigBuyUsd,
+    bigSellUsd: signal.bigSellUsd,
+    netWhale: signal.netWhale,
+    priceChangePct: signal.priceChangePct,
+    priceRangePct: signal.priceRangePct,
+    whaleTradeCount: signal.whaleTradeCount,
+    absorption: signal.absorption,
+    tags: [...(signal.tags || [])],
+    explanation: signal.explanation || null,
+    timestamp: signal.timestamp || Date.now()
+  };
+}
+
+function featureLabelsFromSignal(signal) {
+  const tags = new Set(signal.tags || []);
+  const buyPct = Number(signal.buyPct || 0) * 100;
+  if (buyPct >= 64) tags.add('BUYERS_DOMINANT');
+  if (buyPct <= 42) tags.add('SELLERS_DOMINANT');
+  if (signal.bigBuyUsd > config.whaleUsd) tags.add('BIG_BUY_PRINT');
+  if (signal.bigSellUsd > config.whaleUsd) tags.add('BIG_SELL_PRINT');
+  if (signal.netWhale > config.whaleUsd) tags.add('NET_WHALE_BUY');
+  if (signal.netWhale < -config.whaleUsd) tags.add('NET_WHALE_SELL');
+  if (Math.abs(signal.priceChangePct || 0) > 0.2) tags.add(signal.priceChangePct > 0 ? 'PRICE_LIFT_SEEN' : 'PRICE_DROP_SEEN');
+  if ((signal.priceRangePct || 0) < 0.75 && (signal.totalFlow || 0) > config.whaleUsd * 2) tags.add('COMPRESSED_FLOW');
+  if (signal.absorption) tags.add('ABSORPTION_PATTERN');
+  if (!tags.size) tags.add('NO_CLEAR_PATTERN');
+  return [...tags].slice(0, 12);
+}
+
+function explainSignalStory(signal) {
+  const buyPct = Number(signal.buyPct || 0) * 100;
+  const cluesUp = [];
+  const cluesDown = [];
+  const neutral = [];
+
+  if (signal.totalFlow > config.whaleUsd * 3) neutral.push(`تدفق عالي ${formatUsd(signal.totalFlow)}`);
+  if (signal.bigBuyUsd > config.whaleUsd) cluesUp.push(`ظهرت صفقة/صفقات شراء كبيرة ${formatUsd(signal.bigBuyUsd)}`);
+  if (buyPct > 64) cluesUp.push(`اختلال شراء واضح: ${buyPct.toFixed(1)}% من التدفق شراء عدواني`);
+  if (signal.netWhale > config.whaleUsd) cluesUp.push(`صافي الحيتان شراء ${formatUsd(signal.netWhale)}`);
+  if (signal.absorption) cluesUp.push('امتصاص: شراء قوي مع نطاق سعري مضغوط');
+  if (signal.priceChangePct > 0.2) cluesUp.push(`رفع سعري داخل النافذة ${signal.priceChangePct.toFixed(2)}%`);
+
+  if (signal.bigSellUsd > config.whaleUsd) cluesDown.push(`ظهرت صفقة/صفقات بيع كبيرة ${formatUsd(signal.bigSellUsd)}`);
+  if (buyPct < 42 && signal.totalFlow > config.whaleUsd) cluesDown.push(`اختلال بيع: المشترين فقط ${buyPct.toFixed(1)}%`);
+  if (signal.netWhale < -config.whaleUsd) cluesDown.push(`صافي الحيتان بيع ${formatUsd(signal.netWhale)}`);
+  if (signal.priceChangePct < -0.2) cluesDown.push(`ضغط نزول داخل النافذة ${signal.priceChangePct.toFixed(2)}%`);
+  if (signal.priceRangePct > 1.2 && signal.bigSellUsd > signal.bigBuyUsd) cluesDown.push('النطاق توسّع مع بيع أكبر من الشراء');
+
+  const direction = signal.priceChangePct > 0.2 ? 'UP' : signal.priceChangePct < -0.2 ? 'DOWN' : 'WATCH';
+  return {
+    direction,
+    whyUp: cluesUp.slice(0, 5),
+    whyDown: cluesDown.slice(0, 5),
+    neutral: neutral.slice(0, 4),
+    beforeRise: cluesUp.length ? cluesUp.slice(0, 4) : ['لم تظهر بصمة صعود كافية بعد'],
+    beforeDrop: cluesDown.length ? cluesDown.slice(0, 4) : ['لم تظهر بصمة نزول كافية بعد'],
+    summary: direction === 'UP'
+      ? `ارتفاع/رفع محتمل لأن ${cluesUp[0] || 'التدفق يميل للمشترين'}`
+      : direction === 'DOWN'
+        ? `نزول/ضغط محتمل لأن ${cluesDown[0] || 'التدفق يميل للبائعين'}`
+        : 'قراءة مراقبة: لا يوجد سبب غالب واضح حتى الآن'
+  };
+}
+
+function updateCoinMemory(results, now, cfg) {
+  const lookback = Math.max(60000, Number(cfg.windowSec || 60) * 1000 * 3);
+  for (const signal of results) {
+    if (!signal?.symbol || !signal.price) continue;
+    const arr = symbolSnapshots.get(signal.symbol) || [];
+    let older = null;
+    for (let i = arr.length - 1; i >= 0; i--) {
+      if (now - arr[i].timestamp >= lookback) { older = arr[i]; break; }
+    }
+    if (older?.price > 0) {
+      const movePct = ((signal.price - older.price) / older.price) * 100;
+      const lastAt = lastLessonAt.get(signal.symbol) || 0;
+      if (Math.abs(movePct) >= 0.28 && now - lastAt > 90000) {
+        const direction = movePct > 0 ? 'UP' : 'DOWN';
+        const lesson = buildCoinLesson(signal.symbol, direction, movePct, older, signal, now);
+        pushLimited(hiveMemory.lessons, lesson, 120);
+        updateSymbolBrain(signal.symbol, direction, older, movePct);
+        lastLessonAt.set(signal.symbol, now);
+        log('hive', `${signal.symbol} learned ${direction}: ${lesson.short}`);
+      }
+    }
+
+    arr.push({
+      timestamp: now,
+      price: signal.price,
+      score: signal.score,
+      buyPct: signal.buyPct,
+      tags: featureLabelsFromSignal(signal),
+      snapshot: signalFeatureSnapshot(signal)
+    });
+    const keepAfter = now - Math.max(3600000, Number(cfg.arenaHorizonSec || 3600) * 1000);
+    symbolSnapshots.set(signal.symbol, arr.filter(x => x.timestamp >= keepAfter).slice(-360));
+  }
+}
+
+function buildCoinLesson(symbol, direction, movePct, before, after, now) {
+  const beforeTags = before.tags || [];
+  const main = beforeTags.slice(0, 4).join(' + ') || 'NO_CLEAR_PATTERN';
+  const short = `${main} ظهر قبل ${direction === 'UP' ? 'صعود' : 'نزول'} ${movePct.toFixed(2)}%`;
+  return {
+    id: randomUUID(),
+    timestamp: now,
+    symbol,
+    direction,
+    movePct,
+    beforeTags,
+    beforeScore: before.score,
+    afterScore: after.score,
+    beforePrice: before.price,
+    afterPrice: after.price,
+    short,
+    ar: direction === 'UP'
+      ? `${symbol}: قبل الصعود كانت العلامات ${main}. الخلية تحفظها كاحتمال تكرار.`
+      : `${symbol}: قبل النزول كانت العلامات ${main}. الخلية تحفظها كتحذير هبوط.`
+  };
+}
+
+function updateSymbolBrain(symbol, direction, before, movePct) {
+  const brain = hiveMemory.symbolStats.get(symbol) || {
+    symbol,
+    upMoves: 0,
+    downMoves: 0,
+    factors: {},
+    lastLesson: null,
+    netMoveLearned: 0
+  };
+  if (direction === 'UP') brain.upMoves += 1; else brain.downMoves += 1;
+  brain.netMoveLearned += movePct;
+  for (const tag of before.tags || []) {
+    brain.factors[tag] = (brain.factors[tag] || 0) + (direction === 'UP' ? 1 : -1);
+  }
+  brain.lastLesson = Date.now();
+  hiveMemory.symbolStats.set(symbol, brain);
+}
+
+function openPaperTrade(contestant, prediction, signal, now) {
+  if (!signal?.price || contestant.position) return null;
+  if (!['UP', 'DOWN'].includes(prediction.direction)) return { action: 'WATCH_ONLY', reason: 'لا توجد صفقة وهمية لأن القرار مراقبة فقط' };
+  const equity = computeEquity(contestant);
+  const baseRisk = 0.12 + Math.max(0, prediction.conviction - 55) / 200 + Math.max(0, contestant.risk) / 250;
+  const riskPct = clamp(baseRisk, 0.06, MAX_PAPER_RISK);
+  const notional = Math.max(20, Math.min(equity * riskPct, contestant.cash * 0.92));
+  if (notional < 10) return { action: 'SKIP', reason: 'رصيد وهمي غير كافٍ' };
+  const fee = notional * PAPER_FEE_BPS / 10000;
+  const qty = notional / signal.price;
+  const side = prediction.direction === 'UP' ? 'LONG' : 'SHORT';
+  const position = {
+    id: randomUUID(),
+    symbol: signal.symbol,
+    side,
+    qty,
+    notional,
+    entryPrice: signal.price,
+    openedAt: now,
+    entryFee: fee,
+    strategy: contestant.style.key,
+    tags: [...(prediction.signalTags || [])],
+    basis: prediction.basis
+  };
+  contestant.cash = Math.max(0, contestant.cash - notional - fee);
+  contestant.position = position;
+  contestant.trades += 1;
+  hiveMemory.totalPaperTrades += 1;
+  return {
+    action: 'OPEN_FAKE',
+    positionId: position.id,
+    side,
+    symbol: signal.symbol,
+    notional: Number(notional.toFixed(2)),
+    entryPrice: signal.price,
+    fee: Number(fee.toFixed(4)),
+    text: `${contestant.callsign} فتح ${side} وهمي على ${signal.symbol} بقيمة ${formatUsd(notional)}`
+  };
+}
+
+function closePaperTrade(contestant, prediction, exitPrice, now) {
+  const pos = contestant.position;
+  if (!pos || pos.symbol !== prediction.symbol) return null;
+  const sideMult = pos.side === 'LONG' ? 1 : -1;
+  const grossPnl = (exitPrice - pos.entryPrice) * pos.qty * sideMult;
+  const closeNotional = pos.qty * exitPrice;
+  const exitFee = closeNotional * PAPER_FEE_BPS / 10000;
+  const netPnl = grossPnl - pos.entryFee - exitFee;
+  contestant.cash += pos.notional + grossPnl - exitFee;
+  contestant.realizedPnl += netPnl;
+  contestant.position = null;
+  return {
+    action: 'CLOSE_FAKE',
+    side: pos.side,
+    symbol: pos.symbol,
+    entryPrice: pos.entryPrice,
+    exitPrice,
+    notional: Number(pos.notional.toFixed(2)),
+    grossPnl: Number(grossPnl.toFixed(4)),
+    netPnl: Number(netPnl.toFixed(4)),
+    pnlPct: Number(((grossPnl / Math.max(1, pos.notional)) * 100).toFixed(3)),
+    heldMs: now - pos.openedAt
+  };
+}
+
+function computeEquity(contestant) {
+  let equity = Number(contestant.cash || 0);
+  const pos = contestant.position;
+  if (!pos) return equity;
+  const price = currentPrices.get(pos.symbol)?.price || pos.entryPrice;
+  const sideMult = pos.side === 'LONG' ? 1 : -1;
+  const grossPnl = (price - pos.entryPrice) * pos.qty * sideMult;
+  return equity + pos.notional + grossPnl;
+}
+
+function analyzeOutcome(contestant, prediction, outcome, signal) {
+  const snap = prediction.signalSnapshot || {};
+  const tags = snap.tags || prediction.signalTags || [];
+  const pnl = outcome.paperResult?.netPnl ?? 0;
+  let mood;
+  let analysis;
+  let nextRule;
+
+  if (outcome.hit || pnl > 0) {
+    mood = 'REPEAT_WINNER';
+    const pattern = tags.slice(0, 3).join(' + ') || prediction.indicator;
+    analysis = `ربح/أصاب لأن ${pattern} سبق الحركة على ${prediction.symbol}. سيكرر نفس المنهج عند تكرار العلامات.`;
+    nextRule = `كرر ${contestant.style.ar} عندما تظهر ${pattern} مع conviction أعلى من ${Math.max(45, prediction.conviction - 8)}.`;
+    contestant.learning.confidence = clamp(contestant.learning.confidence + 4, 5, 100);
+    contestant.minConviction = clamp(contestant.minConviction - 1, 35, 85);
+    for (const tag of tags) contestant.learning.winsByTag[tag] = (contestant.learning.winsByTag[tag] || 0) + 1;
+    contestant.learning.repeatRule = nextRule;
+  } else {
+    mood = 'RECALIBRATE_LOSS';
+    const cause = classifyLossCause(prediction, snap, outcome.movePct, signal);
+    analysis = `خسر/أخطأ لأن ${cause}. سيخفف الثقة ويرفع شرط الدخول الوهمي.`;
+    nextRule = `تجنب ${contestant.style.ar} إذا ظهرت ${cause}.`;
+    contestant.learning.confidence = clamp(contestant.learning.confidence - 5, 5, 100);
+    contestant.minConviction = clamp(contestant.minConviction + 2, 35, 88);
+    for (const tag of tags) contestant.learning.lossesByTag[tag] = (contestant.learning.lossesByTag[tag] || 0) + 1;
+    contestant.learning.avoidRule = nextRule;
+  }
+
+  contestant.learning.mood = mood;
+  contestant.learning.lastAnalysis = analysis;
+  return {
+    id: randomUUID(),
+    timestamp: Date.now(),
+    contestantId: contestant.id,
+    callsign: contestant.callsign,
+    symbol: prediction.symbol,
+    direction: prediction.direction,
+    hit: outcome.hit,
+    movePct: outcome.movePct,
+    pnl,
+    mood,
+    analysis,
+    nextRule,
+    tags: tags.slice(0, 6)
+  };
+}
+
+function classifyLossCause(prediction, snap, movePct, signal) {
+  const tags = new Set(snap.tags || prediction.signalTags || []);
+  const buyPct = Number(snap.buyPct || 0) * 100;
+  if (prediction.direction === 'UP' && (snap.bigSellUsd || 0) > (snap.bigBuyUsd || 0) * 1.15) return 'ضغط البيع الكبير كان أقوى من الشراء';
+  if (prediction.direction === 'DOWN' && buyPct > 62) return 'المشترون امتصوا البيع ولم يسمحوا بالهبوط';
+  if (prediction.direction === 'UP' && (snap.priceRangePct || 0) > 1.4) return 'النطاق كان واسعًا؛ الدخول الوهمي جاء بعد حركة متأخرة';
+  if (prediction.direction === 'UP' && movePct < 0) return 'لم يحصل follow-through بعد إشارة الشراء';
+  if (prediction.direction === 'DOWN' && movePct > 0) return 'البيع تحول إلى فخ وانعكس السعر للأعلى';
+  if (tags.has('NO_CLEAR_PATTERN')) return 'العلامات كانت غير واضحة والروبوت بالغ في الثقة';
+  return signal?.tags?.includes('SELL PRESSURE') ? 'ظهر SELL PRESSURE بعد القرار' : 'السوق تحرك عكس المنهج خلال مدة التوقع';
+}
+
+function recordHiveOutcome(contestant, prediction, outcome, signal) {
+  hiveMemory.totalResolved += 1;
+  const tags = (prediction.signalSnapshot?.tags || prediction.signalTags || ['NO_TAG']).slice(0, 8);
+  const pnl = outcome.paperResult?.netPnl ?? 0;
+  const win = outcome.hit || pnl > 0;
+  const keys = [
+    `${contestant.style.key}|${prediction.direction}|STYLE`,
+    ...tags.map(tag => `${contestant.style.key}|${prediction.direction}|${tag}`),
+    ...tags.map(tag => `GLOBAL|${prediction.direction}|${tag}`)
+  ];
+
+  for (const key of keys) {
+    const st = hiveMemory.patternStats.get(key) || { key, wins: 0, losses: 0, pnl: 0, games: 0, lastAt: 0 };
+    st.games += 1;
+    if (win) st.wins += 1; else st.losses += 1;
+    st.pnl += pnl;
+    st.lastAt = Date.now();
+    hiveMemory.patternStats.set(key, st);
+  }
+
+  if (outcome.selfReview) {
+    pushLimited(hiveMemory.reviews, outcome.selfReview, 160);
+    const broad = {
+      id: randomUUID(),
+      timestamp: Date.now(),
+      type: win ? 'WIN_RULE' : 'LOSS_WARNING',
+      message: outcome.selfReview.nextRule,
+      source: contestant.callsign,
+      symbol: prediction.symbol,
+      tags
+    };
+    pushLimited(hiveMemory.broadcasts, broad, 80);
+  }
+}
+
+function getSharedHiveBoost(contestant, signal, direction) {
+  if (!direction || direction === 'WATCH') return { boost: 0, note: '' };
+  const tags = featureLabelsFromSignal(signal).slice(0, 6);
+  let boost = 0;
+  let best = null;
+  for (const tag of tags) {
+    for (const key of [`${contestant.style.key}|${direction}|${tag}`, `GLOBAL|${direction}|${tag}`]) {
+      const st = hiveMemory.patternStats.get(key);
+      if (!st || st.games < 3) continue;
+      const acc = st.wins / Math.max(1, st.games);
+      const edge = (acc - 0.5) * 18 + Math.max(-6, Math.min(6, st.pnl / 30));
+      boost += edge;
+      if (!best || edge > best.edge) best = { tag, acc, edge, games: st.games };
+    }
+  }
+  boost = clamp(boost, -18, 18);
+  return {
+    boost,
+    note: best ? `${best.tag} ${Math.round(best.acc * 100)}%/${best.games}` : ''
+  };
+}
+
+function getHiveSnapshot() {
+  const equities = contestants.map(c => computeEquity(c));
+  const totalEquity = equities.reduce((a, b) => a + b, 0);
+  const totalCash = contestants.reduce((sum, c) => sum + Number(c.cash || 0), 0);
+  const realizedPnl = contestants.reduce((sum, c) => sum + Number(c.realizedPnl || 0), 0);
+  const openPositions = contestants.filter(c => c.position).length;
+  const sorted = contestants.slice().sort((a, b) => computeEquity(b) - computeEquity(a));
+  const bestBot = sorted[0];
+  const worstBot = sorted.at(-1);
+
+  const topPatterns = [...hiveMemory.patternStats.values()]
+    .filter(st => st.games >= 2)
+    .map(st => ({
+      ...st,
+      winRate: st.games ? st.wins / st.games : 0,
+      edge: (st.games ? st.wins / st.games : 0) * 100 + Math.max(-20, Math.min(20, st.pnl / 10))
+    }))
+    .sort((a, b) => b.edge - a.edge || b.games - a.games)
+    .slice(0, 12);
+
+  const dangerPatterns = [...hiveMemory.patternStats.values()]
+    .filter(st => st.games >= 2)
+    .map(st => ({
+      ...st,
+      winRate: st.games ? st.wins / st.games : 0,
+      edge: (st.games ? st.wins / st.games : 0) * 100 + Math.max(-20, Math.min(20, st.pnl / 10))
+    }))
+    .sort((a, b) => a.edge - b.edge || b.games - a.games)
+    .slice(0, 8);
+
+  const symbolBrains = [...hiveMemory.symbolStats.values()]
+    .map(s => ({
+      symbol: s.symbol,
+      upMoves: s.upMoves,
+      downMoves: s.downMoves,
+      netMoveLearned: Number(s.netMoveLearned.toFixed(3)),
+      topFactors: Object.entries(s.factors || {})
+        .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+        .slice(0, 5)
+        .map(([tag, score]) => ({ tag, score }))
+    }))
+    .sort((a, b) => (b.upMoves + b.downMoves) - (a.upMoves + a.downMoves))
+    .slice(0, 12);
+
+  const sharedRules = hiveMemory.broadcasts.slice(-12).reverse();
+  return {
+    timestamp: Date.now(),
+    fakeBank: {
+      initialPerBot: INITIAL_FAKE_USD,
+      totalStarting: INITIAL_FAKE_USD * contestants.length,
+      totalEquity: Number(totalEquity.toFixed(2)),
+      totalCash: Number(totalCash.toFixed(2)),
+      realizedPnl: Number(realizedPnl.toFixed(2)),
+      unrealizedPnl: Number((totalEquity - totalCash - openPositions * 0).toFixed(2)),
+      totalPnl: Number((totalEquity - INITIAL_FAKE_USD * contestants.length).toFixed(2)),
+      openPositions,
+      paperTrades: hiveMemory.totalPaperTrades,
+      bestBot: bestBot ? { id: bestBot.id, callsign: bestBot.callsign, equity: Number(computeEquity(bestBot).toFixed(2)), pnl: Number((computeEquity(bestBot) - INITIAL_FAKE_USD).toFixed(2)), mood: bestBot.learning?.mood } : null,
+      worstBot: worstBot ? { id: worstBot.id, callsign: worstBot.callsign, equity: Number(computeEquity(worstBot).toFixed(2)), pnl: Number((computeEquity(worstBot) - INITIAL_FAKE_USD).toFixed(2)), mood: worstBot.learning?.mood } : null
+    },
+    topPatterns,
+    dangerPatterns,
+    symbolBrains,
+    lessons: hiveMemory.lessons.slice(-14).reverse(),
+    reviews: hiveMemory.reviews.slice(-14).reverse(),
+    sharedRules,
+    totalResolved: hiveMemory.totalResolved
+  };
+}
+
+function pushLimited(arr, item, max) {
+  arr.push(item);
+  if (arr.length > max) arr.splice(0, arr.length - max);
+}
+
 async function initValidSymbols() {
   // V6 uses Binance Futures WebSocket aggTrade streams for live market data.
   // REST exchangeInfo is optional only. If Binance blocks REST from a cloud IP,
@@ -1085,7 +1586,7 @@ async function normalizeConfig(raw) {
       const before = symbols;
       symbols = before.filter(s => /^[A-Z0-9]{2,30}USDT$/.test(s));
       rejected.push(...before.filter(s => !/^[A-Z0-9]{2,30}USDT$/.test(s)));
-      warnings.push('REST symbol validation unavailable; V7 is using safe USDT symbol format checks and Binance WebSocket streams.');
+      warnings.push('REST symbol validation unavailable; V8 is using safe USDT symbol format checks and Binance WebSocket streams.');
     }
 
     if (symbols.length === 0) {
@@ -1436,7 +1937,7 @@ function formatDuration(seconds) {
 
 app.listen(PORT, () => {
   startBotLoop();
-  log('server', `Whale Hunter Radar Bot Arena V7 online on port ${PORT}. ALL BINANCE WebSocket mode. 500 autonomous robot contestants. Monitoring only. No API keys. No trading.`);
+  log('server', `Whale Hunter Radar Hive Mind V8 online on port ${PORT}. ALL BINANCE WebSocket mode. 500 bots with $1000 fake money each. Monitoring only. No API keys. No trading.`);
   ensureTradeStreams(config.symbols);
   initValidSymbols();
 });

@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="WhaleHunter" />
-  <title>Whale Hunter Radar — All Binance Bot Arena</title>
+  <title>Whale Hunter Radar — Hive Mind Paper Arena</title>
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   <style>
@@ -1153,6 +1153,54 @@
       .arena-grid { grid-template-columns: 1fr; }
     }
 
+
+    .hive-shell {
+      margin: 16px 0;
+      border: 1px solid rgba(24, 255, 155, 0.28);
+      border-radius: 30px;
+      padding: 18px;
+      background: linear-gradient(145deg, rgba(8, 34, 38, 0.80), rgba(21, 12, 48, 0.70));
+      box-shadow: 0 0 34px rgba(24, 255, 155, .13), inset 0 0 45px rgba(0, 229, 255, .035);
+      position: relative;
+      overflow: hidden;
+    }
+    .hive-shell::before {
+      content: "HIVE MIND";
+      position:absolute;
+      left: -10px;
+      bottom: -28px;
+      font-size: clamp(52px, 12vw, 140px);
+      color: rgba(24,255,155,.055);
+      font-weight: 1000;
+      letter-spacing: -.06em;
+      direction:ltr;
+      pointer-events:none;
+    }
+    .hive-head { display:flex; gap:14px; justify-content:space-between; align-items:flex-start; position:relative; z-index:1; }
+    .hive-head h2 { margin:0; font-size:clamp(28px,4vw,48px); }
+    .hive-head p { margin:6px 0 0; color:var(--muted); line-height:1.65; max-width:860px; }
+    .hive-chip { direction:ltr; border:1px solid rgba(255,230,109,.34); color:var(--yellow); background:rgba(255,230,109,.08); border-radius:999px; padding:10px 14px; font-weight:1000; white-space:nowrap; }
+    .hive-stats { margin-top:14px; display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; position:relative; z-index:1; }
+    .hive-stat { border:1px solid rgba(24,255,155,.22); background:rgba(2,9,18,.52); border-radius:18px; padding:14px; }
+    .hive-stat span { display:block; color:var(--muted); direction:ltr; text-transform:uppercase; letter-spacing:.08em; font-size:12px; }
+    .hive-stat strong { display:block; margin-top:6px; direction:ltr; font-size:clamp(20px,3vw,32px); color:var(--ink); }
+    .hive-grid { margin-top:12px; display:grid; grid-template-columns: 1fr 1fr; gap:12px; position:relative; z-index:1; }
+    .hive-board { border:1px dashed rgba(0,229,255,.24); background:rgba(3,9,21,.55); border-radius:22px; padding:14px; min-height:155px; }
+    .hive-board h3 { margin:0 0 10px; color:var(--cyan); font-size:20px; }
+    .hive-row { display:grid; grid-template-columns: 1fr auto; gap:10px; align-items:center; border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.045); border-radius:16px; padding:11px; margin:8px 0; }
+    .hive-row b { display:block; font-size:15px; line-height:1.35; }
+    .hive-row small { display:block; color:var(--muted); margin-top:3px; line-height:1.35; }
+    .hive-score { direction:ltr; font-weight:1000; color:var(--green); text-align:left; }
+    .hive-empty { border:1px dashed rgba(0,229,255,.22); border-radius:18px; padding:18px; color:var(--muted); text-align:center; line-height:1.7; }
+    .money-up { color:var(--green) !important; }
+    .money-down { color:var(--red) !important; }
+
+    @media (max-width: 760px) {
+      .hive-head { flex-direction:column; }
+      .hive-stats { grid-template-columns:repeat(2, 1fr); }
+      .hive-grid { grid-template-columns:1fr; }
+    }
+
   </style>
 </head>
 <body>
@@ -1267,6 +1315,41 @@
     </section>
 
 
+    <section class="hive-shell" aria-label="Hive Mind Paper Money Intelligence">
+      <div class="hive-head">
+        <div>
+          <h2>🐝 خلية النحل الذكية — Hive Mind Paper Arena</h2>
+          <p>كل روبوت يبدأ بـ <b>$1000 وهمية</b>. يفتح مراكز وهمية فقط داخل اللعبة على أسعار حقيقية، يتعلم من الربح والخسارة، ثم يشارك القاعدة مع باقي الخلية. لا توجد أوامر Binance، لا أموال حقيقية، ولا توصيات دخول.</p>
+        </div>
+        <div class="hive-chip" id="hiveChip">500 × $1000 FAKE</div>
+      </div>
+      <div class="hive-stats">
+        <div class="hive-stat"><span>Total Fake Equity</span><strong id="hiveEquity">$500,000</strong></div>
+        <div class="hive-stat"><span>Total PnL</span><strong id="hivePnl">$0</strong></div>
+        <div class="hive-stat"><span>Open Fake Positions</span><strong id="hiveOpenPositions">0</strong></div>
+        <div class="hive-stat"><span>Learned Lessons</span><strong id="hiveLessonsCount">0</strong></div>
+      </div>
+      <div class="hive-grid">
+        <div class="hive-board">
+          <h3>Shared Winning Rules / قواعد الرابحين</h3>
+          <div id="hiveRules" class="hive-empty">بعد أول جولات وهمية، الرابحين يعلمون الخلية: ما المؤشرات التي سبقت الصعود أو النزول.</div>
+        </div>
+        <div class="hive-board">
+          <h3>Loss Reviews / تحليل الخسارة</h3>
+          <div id="hiveReviews" class="hive-empty">أي روبوت يخسر يشرح السبب: بيع أقوى، دخول متأخر، فخ، أو عدم استمرار الحركة.</div>
+        </div>
+        <div class="hive-board">
+          <h3>Coin Memory / ذاكرة كل عملة</h3>
+          <div id="hiveCoins" class="hive-empty">اللعبة ستتعلم: ماذا ظهر قبل ارتفاع BTC؟ ماذا ظهر قبل نزول WIF؟ وهكذا لكل عملة.</div>
+        </div>
+        <div class="hive-board">
+          <h3>Pattern Brain / عقل الأنماط</h3>
+          <div id="hivePatterns" class="hive-empty">تظهر هنا أقوى تركيبات المؤشرات حسب نتائج الروبوتات الوهمية.</div>
+        </div>
+      </div>
+    </section>
+
+
     <section class="main-grid">
       <aside class="loadout">
         <h2>Loadout / الإعدادات</h2>
@@ -1366,6 +1449,15 @@
       leaderboard: document.getElementById('leaderboard'),
       predictions: document.getElementById('predictions'),
       styleBoard: document.getElementById('styleBoard'),
+      hiveChip: document.getElementById('hiveChip'),
+      hiveEquity: document.getElementById('hiveEquity'),
+      hivePnl: document.getElementById('hivePnl'),
+      hiveOpenPositions: document.getElementById('hiveOpenPositions'),
+      hiveLessonsCount: document.getElementById('hiveLessonsCount'),
+      hiveRules: document.getElementById('hiveRules'),
+      hiveReviews: document.getElementById('hiveReviews'),
+      hiveCoins: document.getElementById('hiveCoins'),
+      hivePatterns: document.getElementById('hivePatterns'),
       startBtn: document.getElementById('startBtn'),
       scanBtn: document.getElementById('scanBtn'),
       saveBtn: document.getElementById('saveBtn'),
@@ -1395,6 +1487,7 @@
     renderSignals([]);
     renderRadar([]);
     renderArena(null);
+    renderHive(null);
     renderBotSwarm(null);
     boot();
 
@@ -1435,6 +1528,7 @@
         scanning = Boolean(data.scanning);
         setServerStatus(running ? 'LIVE' : 'IDLE');
         if (data.arena) renderArena(data.arena);
+        if (data.hive) renderHive(data.hive);
         if (data.botSwarm) renderBotSwarm(data.botSwarm);
         if (Array.isArray(data.logs)) data.logs.forEach(addLog);
         if (data.lastScan) applyScan(data.lastScan, false);
@@ -1480,7 +1574,8 @@
       });
 
       eventSource.addEventListener('scan', evt => applyScan(parseEvent(evt), true));
-      eventSource.addEventListener('arena', evt => renderArena(parseEvent(evt)));
+      eventSource.addEventListener('arena', evt => { const arena = parseEvent(evt); renderArena(arena); if (arena?.hive) renderHive(arena.hive); });
+      eventSource.addEventListener('hive', evt => renderHive(parseEvent(evt)));
       eventSource.addEventListener('bot-tick', evt => renderBotSwarm(parseEvent(evt)));
       eventSource.addEventListener('log', evt => addLog(parseEvent(evt)));
     }
@@ -1493,6 +1588,7 @@
           hydrateConfig(config);
         }
         if (health.arena) renderArena(health.arena);
+        if (health.hive) renderHive(health.hive);
         if (health.botSwarm) renderBotSwarm(health.botSwarm);
         running = Boolean(health.running);
         scanning = Boolean(health.scanning);
@@ -1543,6 +1639,7 @@
       renderRadar(latestSignals);
       updateThreat(latestSignals);
       if (scan.arena) renderArena(scan.arena);
+      if (scan.hive) renderHive(scan.hive);
 
       const topSignal = latestSignals[0] || null;
       const boss = latestSignals.find(s => s.hot && s.score >= 90) || null;
@@ -1671,6 +1768,7 @@
                 </div>
                 <div class="badge ${isBoss ? 'boss' : signal.hot ? 'hot' : ''}">${status}</div>
                 <div class="price-note">Price ${fmtPrice(signal.price)} · ${escapeHtml(signal.note || 'watch signal')}</div>
+                <div class="price-note">${escapeHtml(signal.explanation?.summary || 'Hive waiting for more cause/effect memory')}</div>
               </div>
               <div class="score">${signal.score}</div>
             </div>
@@ -1743,6 +1841,7 @@
       els.arenaChip.textContent = `${total} ROBOT BOTS · ${fmtDuration(horizon)} WATCH`;
       if (els.arenaBotMode) els.arenaBotMode.textContent = 'AUTO';
       if (arena?.botSwarm) renderBotSwarm(arena.botSwarm);
+      if (arena?.hive) renderHive(arena.hive);
 
       const leaders = arena?.leaders || [];
       if (!leaders.length) {
@@ -1753,7 +1852,7 @@
             <div class="rank-num">${index + 1}</div>
             <div>
               <div class="agent-name">${escapeHtml(racer.callsign)}</div>
-              <div class="agent-sub">${escapeHtml(racer.styleAr)} · ${escapeHtml(racer.indicator)} · ${racer.wins}/${racer.games || 0} hits · streak ${racer.streak || 0}</div>
+              <div class="agent-sub">${escapeHtml(racer.styleAr)} · ${escapeHtml(racer.indicator)} · ${racer.wins}/${racer.games || 0} hits · fake ${fmtUsd(racer.fakeEquity || 1000)} · ${escapeHtml(racer.learningMood || 'OBSERVING')}</div>
             </div>
             <div class="agent-score">${racer.xp}<small>${Math.round((racer.accuracy || 0) * 100)}% ACC</small></div>
           </div>`).join('');
@@ -1769,6 +1868,7 @@
               <div class="prediction-main">${escapeHtml(pred.callsign)} → ${escapeHtml(pred.symbol)} <span class="direction ${directionClass(pred.direction)}">${escapeHtml(pred.direction)}</span></div>
               <div class="pred-sub">${escapeHtml(pred.styleAr)} · ${escapeHtml(pred.indicator)} · conviction ${pred.conviction}/100 · resolves in ${fmtMs(pred.msLeft)}</div>
               <div class="pred-sub">${escapeHtml(pred.basis || 'watch signal')} · entry ${fmtPrice(pred.entryPrice)}</div>
+              <div class="pred-sub">${pred.paperTrade?.action === 'OPEN_FAKE' ? `ورقة وهمية: ${escapeHtml(pred.paperTrade.side)} ${fmtUsd(pred.paperTrade.notional)}` : 'Watch-only / no real trade'}</div>
             </div>
             <div class="agent-score">${pred.signalScore}<small>SIGNAL</small></div>
           </div>`).join('');
@@ -1782,11 +1882,53 @@
           <div class="style-row">
             <div>
               <div class="agent-name">#${index + 1} ${escapeHtml(style.styleAr)} / ${escapeHtml(style.style)}</div>
-              <div class="style-sub">Indicator: ${escapeHtml(style.indicator)} · racers ${style.racers} · games ${style.games} · accuracy ${Math.round((style.accuracy || 0) * 100)}%</div>
+              <div class="style-sub">Indicator: ${escapeHtml(style.indicator)} · racers ${style.racers} · games ${style.games} · accuracy ${Math.round((style.accuracy || 0) * 100)}% · avg fake PnL ${fmtUsd(style.avgFakePnl || 0)}</div>
             </div>
             <div class="agent-score">${Math.round(style.avgXp)}<small>AVG XP</small></div>
           </div>`).join('');
       }
+    }
+
+
+    function renderHive(hive) {
+      const bank = hive?.fakeBank || { totalEquity: 500000, totalPnl: 0, openPositions: 0, initialPerBot: 1000 };
+      if (els.hiveChip) els.hiveChip.textContent = `500 × ${fmtUsd(bank.initialPerBot || 1000)} FAKE`;
+      if (els.hiveEquity) els.hiveEquity.textContent = fmtUsd(bank.totalEquity || 500000);
+      if (els.hivePnl) {
+        els.hivePnl.textContent = fmtUsd(bank.totalPnl || 0);
+        els.hivePnl.classList.toggle('money-up', Number(bank.totalPnl || 0) >= 0);
+        els.hivePnl.classList.toggle('money-down', Number(bank.totalPnl || 0) < 0);
+      }
+      if (els.hiveOpenPositions) els.hiveOpenPositions.textContent = String(bank.openPositions || 0);
+      if (els.hiveLessonsCount) els.hiveLessonsCount.textContent = String((hive?.lessons || []).length);
+
+      const rules = hive?.sharedRules || [];
+      els.hiveRules.innerHTML = rules.length ? rules.slice(0, 6).map(rule => `
+        <div class="hive-row">
+          <div><b>${escapeHtml(rule.message || 'Shared rule')}</b><small>${escapeHtml(rule.source || 'Hive')} · ${escapeHtml(rule.symbol || 'ALL')} · ${(rule.tags || []).slice(0,3).map(escapeHtml).join(' + ')}</small></div>
+          <div class="hive-score">${escapeHtml(rule.type || 'RULE')}</div>
+        </div>`).join('') : `<div class="hive-empty">الرابحون لم يشاركوا قواعد بعد. انتظر انتهاء أول مدة توقع.</div>`;
+
+      const reviews = hive?.reviews || [];
+      els.hiveReviews.innerHTML = reviews.length ? reviews.slice(0, 6).map(r => `
+        <div class="hive-row">
+          <div><b>${escapeHtml(r.callsign || 'Bot')} · ${escapeHtml(r.symbol || '')}</b><small>${escapeHtml(r.analysis || '')}</small></div>
+          <div class="hive-score ${Number(r.pnl || 0) >= 0 ? 'money-up' : 'money-down'}">${fmtUsd(r.pnl || 0)}</div>
+        </div>`).join('') : `<div class="hive-empty">لا يوجد تحليل خسارة/ربح بعد.</div>`;
+
+      const coins = hive?.symbolBrains || [];
+      els.hiveCoins.innerHTML = coins.length ? coins.slice(0, 6).map(c => `
+        <div class="hive-row">
+          <div><b>${escapeHtml(c.symbol)} · UP ${c.upMoves} / DOWN ${c.downMoves}</b><small>${(c.topFactors || []).map(f => `${escapeHtml(f.tag)}:${f.score}`).join(' · ') || 'waiting'}</small></div>
+          <div class="hive-score">${Number(c.netMoveLearned || 0).toFixed(2)}%</div>
+        </div>`).join('') : `<div class="hive-empty">ذاكرة العملات تبدأ بعد أن ترى الخلية حركة واضحة بعد علامات سابقة.</div>`;
+
+      const patterns = hive?.topPatterns || [];
+      els.hivePatterns.innerHTML = patterns.length ? patterns.slice(0, 6).map(p => `
+        <div class="hive-row">
+          <div><b>${escapeHtml(p.key || 'pattern')}</b><small>${p.wins}/${p.games} wins · win-rate ${Math.round((p.winRate || 0) * 100)}% · fake PnL ${fmtUsd(p.pnl || 0)}</small></div>
+          <div class="hive-score">${Math.round(p.edge || 0)}</div>
+        </div>`).join('') : `<div class="hive-empty">عقل الأنماط ينتظر نتائج كافية من الصفقات الوهمية.</div>`;
     }
 
     function directionClass(value) {

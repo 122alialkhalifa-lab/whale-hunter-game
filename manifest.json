@@ -1,6 +1,6 @@
 {
-  "name": "Whale Hunter Radar",
-  "short_name": "WhaleHunter",
+  "name": "Whale Hunter Hive Mind",
+  "short_name": "WhaleHive",
   "description": "A game-style iPad PWA that turns Binance USD-M Futures public whale-flow monitoring into a radar game. Monitoring only.",
   "start_url": "/",
   "scope": "/",
@@ -8,7 +8,11 @@
   "orientation": "portrait",
   "theme_color": "#00e5ff",
   "background_color": "#050711",
-  "categories": ["finance", "utilities", "games"],
+  "categories": [
+    "finance",
+    "utilities",
+    "games"
+  ],
   "icons": [
     {
       "src": "/icon.svg",
