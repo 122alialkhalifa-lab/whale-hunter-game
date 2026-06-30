@@ -1,6 +1,6 @@
 {
-  "name": "Whale Hunter Quant Proof",
-  "short_name": "WhaleProof",
+  "name": "Whale Hunter Quant Proof V14",
+  "short_name": "QuantProofV14",
   "description": "Game-style Binance Futures whale-flow mathematical proof lab. Monitoring and paper simulation only.",
   "start_url": "/",
   "scope": "/",
@@ -9,6 +9,11 @@
   "background_color": "#050711",
   "theme_color": "#00e5ff",
   "icons": [
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
   ]
 }

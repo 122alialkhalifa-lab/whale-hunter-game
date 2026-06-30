@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Whale Hunter Quant Proof V13</title>
+  <title>Whale Hunter Quant Proof V14</title>
   <meta name="theme-color" content="#00e5ff" />
   <link rel="manifest" href="/manifest.json" />
   <style>
@@ -38,12 +38,12 @@
     button:active{transform:translateY(1px) scale(.99)} button.stop{border-color:rgba(255,59,107,.55); background:rgba(255,59,107,.14)} button.scan{border-color:rgba(255,232,102,.55); color:var(--yellow)} button.save{border-color:rgba(173,124,255,.55)} button:disabled{opacity:.35; filter:grayscale(1)}
     .grid{display:grid; grid-template-columns:repeat(12,1fr); gap:14px; margin-top:14px}.card{grid-column:span 4; border:1px solid var(--line); background:linear-gradient(180deg,var(--panel),rgba(4,10,24,.66)); border-radius:var(--radius); box-shadow:var(--shadow); padding:14px; min-height:120px; overflow:hidden}.card.wide{grid-column:span 8}.card.full{grid-column:1/-1}.card.half{grid-column:span 6}.card h2{margin:0 0 10px; font-size:20px; color:var(--cyan)} .card h3{margin:0 0 8px; font-size:17px}.big{font-size:38px; font-weight:1000; direction:ltr}.muted{color:var(--muted)} .tiny{font-size:13px;color:var(--muted)}
     .stats{display:grid; grid-template-columns:repeat(4,1fr); gap:10px}.stat{padding:13px; background:rgba(0,229,255,.06); border:1px solid rgba(0,229,255,.16); border-radius:18px}.stat b{display:block; font-size:25px; direction:ltr}.stat span{color:var(--muted); font-size:13px}
-    .alert{border:1px solid rgba(255,232,102,.4); background:linear-gradient(90deg,rgba(255,232,102,.18),rgba(255,59,107,.08)); padding:12px; border-radius:18px; margin-bottom:8px}.alert strong{color:var(--yellow)} .alert .eq{direction:ltr; color:var(--green); font-family:ui-monospace,Menlo,monospace; font-size:13px; overflow-wrap:anywhere}
+    .toolbar{display:grid;grid-template-columns:1.4fr repeat(3,auto);gap:8px;margin:10px 0}.toolbar button{min-height:44px;padding:10px 12px;font-size:13px}.copyBtn{min-height:36px;padding:8px 10px;font-size:12px;border-radius:12px}.alert{border:1px solid rgba(255,232,102,.4); background:linear-gradient(90deg,rgba(255,232,102,.18),rgba(255,59,107,.08)); padding:12px; border-radius:18px; margin-bottom:8px}.alert strong{color:var(--yellow)} .alert .eq{direction:ltr; color:var(--green); font-family:ui-monospace,Menlo,monospace; font-size:13px; overflow-wrap:anywhere}
     .list{display:flex; flex-direction:column; gap:9px; max-height:430px; overflow:auto; padding-left:3px}.row{display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center; border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.035); padding:10px; border-radius:16px}.row .left{min-width:0}.row .symbol{font-size:18px; font-weight:1000; color:var(--white); direction:ltr}.row .bar{height:9px; background:rgba(255,255,255,.08); border-radius:99px; overflow:hidden; margin-top:7px}.row .fill{height:100%; width:0%; background:linear-gradient(90deg,var(--cyan),var(--green)); box-shadow:0 0 12px var(--cyan)}
     .tag{display:inline-block; border:1px solid rgba(0,229,255,.28); color:var(--cyan); border-radius:999px; padding:4px 8px; margin:2px; font-size:12px}.tag.red{color:var(--red); border-color:rgba(255,59,107,.4)} .tag.green{color:var(--green); border-color:rgba(48,255,154,.4)} .tag.yellow{color:var(--yellow); border-color:rgba(255,232,102,.4)}
     .settings{display:grid; grid-template-columns:1.5fr repeat(4,1fr); gap:10px} textarea,input{width:100%; border:1px solid rgba(0,229,255,.26); background:rgba(0,0,0,.25); color:var(--white); border-radius:16px; padding:12px; font-size:15px} textarea{min-height:108px; direction:ltr} label{font-size:13px;color:var(--muted); display:block; margin-bottom:5px}.log{font-family:ui-monospace,Menlo,monospace; direction:ltr; color:#b9f7ff; font-size:12px; line-height:1.45; white-space:pre-wrap; max-height:250px; overflow:auto}
     .login{position:fixed; inset:0; z-index:99; display:flex; align-items:center; justify-content:center; padding:18px; background:rgba(2,4,12,.88); backdrop-filter:blur(12px)}.loginBox{width:min(520px,100%); border:1px solid rgba(0,229,255,.35); background:linear-gradient(180deg,rgba(6,20,45,.94),rgba(3,7,18,.96)); border-radius:30px; padding:22px; box-shadow:0 0 48px rgba(0,229,255,.22)}.loginBox h2{margin:0 0 10px;font-size:30px;color:var(--cyan)}.loginBox input{font-size:22px;text-align:center;letter-spacing:2px; direction:ltr}.hidden{display:none!important}.ltr{direction:ltr}.dangerText{color:var(--red)}.goodText{color:var(--green)}.warnText{color:var(--yellow)}
-    @media(max-width:900px){.top{grid-template-columns:1fr}.controls{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.card,.card.wide,.card.half{grid-column:1/-1}.stats{grid-template-columns:repeat(2,1fr)}.settings{grid-template-columns:1fr 1fr}.settings textarea{grid-column:1/-1}.hero h1{font-size:32px}.radar{width:240px;height:240px}.wrap{padding-bottom:40px}}
+    @media(max-width:900px){.toolbar{grid-template-columns:1fr 1fr}.toolbar input{grid-column:1/-1}.top{grid-template-columns:1fr}.controls{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.card,.card.wide,.card.half{grid-column:1/-1}.stats{grid-template-columns:repeat(2,1fr)}.settings{grid-template-columns:1fr 1fr}.settings textarea{grid-column:1/-1}.hero h1{font-size:32px}.radar{width:240px;height:240px}.wrap{padding-bottom:40px}}
   </style>
 </head>
 <body>
@@ -63,8 +63,8 @@
   <main class="wrap">
     <section class="top">
       <div class="hero">
-        <h1>👑 Whale Hunter Quant Proof V13</h1>
-        <div class="sub">مختبر رياضي حي: كل عملة مسألة، كل Bot عالم، والتنبيه لا يخرج إلا لنمط <b>100% داخل السجل حتى الآن</b>.</div>
+        <h1>👑 Whale Hunter Quant Proof V14</h1>
+        <div class="sub">مختبر رياضي حي: كل عملة مسألة، كل Bot عالم، وكل معادلة ناجحة تُحفظ في Log قابل للنسخ.</div>
         <div class="safe">مراقبة وتداول وهمي فقط. ليست توصية مالية. الرافعة قد تصفّر الحساب.</div>
         <div class="rolebar">
           <span id="roleBadge" class="pill yellow">GUEST</span>
@@ -119,6 +119,18 @@
         <div id="mathReports" class="list"></div>
       </div>
 
+      <div class="card full">
+        <h2>📜 Successful Equation Logs / سجل المعادلات الناجحة</h2>
+        <div class="tiny">كل معادلة تنتهي بربح وهمي تُحفظ هنا. تقدر تبحث، تنسخ سطر واحد، تنسخ الكل، أو تفتح ملف TXT مباشر.</div>
+        <div class="toolbar">
+          <input id="successSearch" placeholder="بحث: SOLUSDT أو BIG_BUY أو اسم Bot" oninput="loadSuccessLogs()" />
+          <button onclick="loadSuccessLogs()">REFRESH</button>
+          <button onclick="copyAllSuccessLogs()">COPY ALL</button>
+          <button onclick="openSuccessTxt()">OPEN TXT</button>
+        </div>
+        <div id="successLogs" class="list"></div>
+      </div>
+
       <div class="card half">
         <h2>🏆 Pattern Vault</h2>
         <div id="patterns" class="list"></div>
@@ -153,21 +165,22 @@ async function checkAuth(){ try{const me=await api('/auth/me'); role=me.role; ca
 async function login(){ try{const pin=$('pin').value.trim(); const r=await api('/auth/login',{method:'POST',body:JSON.stringify({pin})}); role=r.role; canControl=r.canControl; $('login').classList.add('hidden'); updateRole(); connect(); refresh(); }catch(e){$('loginMsg').textContent='الكود خطأ أو غير مسموح.'} }
 async function logout(){ try{await api('/auth/logout',{method:'POST',body:'{}'})}catch{} location.reload(); }
 function updateRole(){ $('roleBadge').textContent=role.toUpperCase(); $('roleBadge').className='pill '+(canControl?'green':'yellow'); $('permText').innerHTML= canControl ? 'أنت <b class="goodText">OWNER</b>: تقدر تبدأ/توقف/تعدل/تصدّر/تمسح.' : 'أنت <b class="warnText">VIEWER</b>: اطلاع فقط، لا يمكنك تغيير تشغيل اللعبة.'; ['startBtn','scanBtn','saveBtn','stopBtn','resetBtn','exportBtn'].forEach(id=>$(id).disabled=!canControl); }
-function connect(){ if(es) es.close(); es=new EventSource('/events'); es.onopen=()=>log('SSE connected'); es.onerror=()=>log('SSE reconnecting...'); ['hello','scan','arena','hive-live','scientist-think','math-report','hive-learn','proof','log','status','stream','symbol'].forEach(ev=>{ es.addEventListener(ev,e=>handleEvent(ev, JSON.parse(e.data))); }); }
+function connect(){ if(es) es.close(); es=new EventSource('/events'); es.onopen=()=>log('SSE connected'); es.onerror=()=>log('SSE reconnecting...'); ['hello','scan','arena','hive-live','scientist-think','math-report','success-log','hive-learn','proof','log','status','stream','symbol'].forEach(ev=>{ es.addEventListener(ev,e=>handleEvent(ev, JSON.parse(e.data))); }); }
 function handleEvent(ev,d){ if(ev==='hello'){ state=d; if(d.hive) renderHive(d.hive); if(d.arena) renderArena(d.arena); log('hello from server'); }
  if(ev==='scan'){ state={...(state||{}), lastScan:d, hive:d.hive, arena:d.arena, running:d.running}; renderState(state); }
  if(ev==='proof'){ proof=d; renderProof(d); }
  if(ev==='hive-live'||ev==='hive-learn'){ if(d.hive) renderHive(d.hive); if(d.consensus||d.weights) renderWeights(d); }
  if(ev==='scientist-think'){ renderThoughts(d); }
  if(ev==='math-report'){ addMathReport(d.report); }
+ if(ev==='success-log'){ addSuccessLog(d.log); if(sound) beep(); }
  if(ev==='log'){ log(`${d.type||'log'}: ${d.message}`); }
  if(ev==='status'){ $('serverBadge').textContent=d.running?'LIVE':'IDLE'; $('serverBadge').className='pill '+(d.running?'green':'yellow'); }
  if(ev==='stream'){ $('wsBadge').textContent=d.connected?'WS LIVE':'WS OFF'; $('wsBadge').className='pill '+(d.connected?'green':'red'); }
  if(ev==='symbol'){ updateRadar(d.signal); }
 }
-async function refresh(){ try{ const s=await api('/state'); state=s; renderState(s); const p=await api('/proof'); proof=p.proof; renderProof(proof); }catch(e){ log('refresh failed: '+e.message); if(String(e.message).includes('AUTH')) $('login').classList.remove('hidden'); } }
+async function refresh(){ try{ const s=await api('/state'); state=s; renderState(s); const p=await api('/proof'); proof=p.proof; renderProof(proof); await loadSuccessLogs(false); }catch(e){ log('refresh failed: '+e.message); if(String(e.message).includes('AUTH')) $('login').classList.remove('hidden'); } }
 function renderState(s){ $('serverBadge').textContent=s.running?'LIVE':'IDLE'; $('serverBadge').className='pill '+(s.running?'green':'yellow'); $('wsBadge').textContent=s.websocket?.connected?'WS LIVE':'WS OFF'; $('wsBadge').className='pill '+(s.websocket?.connected?'green':'red'); $('coinsBadge').textContent='Coins '+(s.config?.activeSymbolCount||s.websocket?.subscribedSymbols||0); if(s.config){$('symbols').value=(s.config.symbols||[]).join('\n'); $('whaleUsd').value=s.config.whaleUsd; $('minScore').value=s.config.minScore; $('windowSec').value=s.config.windowSec; $('arenaHorizonSec').value=s.config.arenaHorizonSec;} if(s.hive) renderHive(s.hive); if(s.arena) renderArena(s.arena); if(s.lastScan) renderSignals(s.lastScan.results||[]); }
-function renderHive(h){ $('bank').textContent=fmtUsd(h.fakeBank?.totalEquity); $('openPos').textContent=h.fakeBank?.openPositions||0; $('reports').textContent=h.totalFormulaReports||0; $('minProof').textContent=h.proof?.minProofSamples||25; renderPatterns(h.topPatterns||[]); renderWeights({weights:h.topWeights||[],consensus:h.mathConsensus}); renderMathReports(h.formulaReports||[]); if(h.proof) renderProof(h.proof); }
+function renderHive(h){ $('bank').textContent=fmtUsd(h.fakeBank?.totalEquity); $('openPos').textContent=h.fakeBank?.openPositions||0; $('reports').textContent=(h.totalFormulaReports||0)+' / ✅ '+(h.successfulFormulaLogCount||0); if(h.successfulFormulaLogs) renderSuccessLogs(h.successfulFormulaLogs); $('minProof').textContent=h.proof?.minProofSamples||25; renderPatterns(h.topPatterns||[]); renderWeights({weights:h.topWeights||[],consensus:h.mathConsensus}); renderMathReports(h.formulaReports||[]); if(h.proof) renderProof(h.proof); }
 function renderArena(a){ /* reserved */ }
 function renderProof(p){ if(!p) return; $('proofBadge').textContent='Perfect '+(p.counts?.perfect||p.perfect?.length||0); $('minProof').textContent=p.minProofSamples||25; const list=$('perfectList'); const arr=p.perfect||[]; if(arr.length>lastPerfectCount && sound) beep(); lastPerfectCount=arr.length; list.innerHTML= arr.length? arr.map(x=>`<div class="alert"><strong>${x.alert}</strong> <span class="ltr">${x.symbol}</span> ${x.direction}<br><span class="tiny">${x.tag} · wins ${x.wins}/${x.games} · avg ${x.avgPnl}</span><div class="eq">${x.equation}</div></div>`).join('') : '<div class="muted">لا يوجد نمط 100% حتى الآن. الخلية ما زالت تبحث وتفشل وتعدل.</div>'; const coins=$('coinBrains'); const c=p.coinBrains||[]; coins.innerHTML=c.length? c.slice(0,30).map(x=>`<div class="row"><div class="left"><div class="symbol">${x.symbol}</div><span class="tiny">Patterns ${x.patterns} · Perfect ${x.perfect} · Games ${x.games} · Best ${x.bestProof?.toFixed?x.bestProof.toFixed(1):x.bestProof}</span><div class="bar"><div class="fill" style="width:${Math.min(100,x.understanding||0)}%"></div></div></div><b>${x.understanding}</b></div>`).join('') : '<div class="muted">تحتاج صفقات وهمية محلولة أكثر حتى تظهر Coin Brains.</div>'; }
 function renderSignals(results){ const el=$('signals'); el.innerHTML=results.slice(0,100).map(s=>`<div class="row"><div class="left"><div class="symbol">${s.symbol}</div><span class="tiny">Score ${s.score} · Price ${Number(s.price||0).toPrecision(7)} · Buy ${pct((s.buyPct||0)*100)} · Δ ${pct(s.priceChangePct)}</span><div>${(s.tags||[]).slice(0,4).map(t=>`<span class="tag ${t.includes('SELL')?'red':t.includes('BUY')?'green':'yellow'}">${t}</span>`).join('')}</div><div class="bar"><div class="fill" style="width:${s.score||0}%"></div></div></div><b>${s.hot?'🔥':'👀'}</b></div>`).join('') || '<div class="muted">بانتظار أول Scan.</div>'; }
@@ -177,11 +190,20 @@ function renderMathReports(arr){ $('mathReports').innerHTML=arr.slice(0,24).map(
 function addMathReport(r){ const el=$('mathReports'); el.insertAdjacentHTML('afterbegin', mathReportHTML(r)); while(el.children.length>30) el.lastElementChild.remove(); }
 function renderThoughts(d){ if(d.reports) renderMathReports(d.reports); }
 function mathReportHTML(r){ if(!r) return ''; const terms=(r.terms||[]).slice(0,4).map(t=>`${t.feature}:${Number(t.value||0).toFixed(2)}`).join(' · '); return `<div class="row"><div class="left"><div class="symbol">${r.callsign||r.bot||'BOT'} ${r.symbol?'<span class="tiny ltr">'+r.symbol+'</span>':''}</div><span class="tiny">${r.direction||''} · reward ${Number(r.reward||r.liveReward||0).toFixed(2)} · ${r.mood||''}</span><div class="eq">${r.equation||'C = 50 + 38Σ(wᵢxᵢ)'}</div><span class="tiny">${terms}</span></div><b>${r.hit===false?'❌':r.hit===true?'✅':'🧠'}</b></div>`; }
+
+function successLogHTML(x){ if(!x) return ''; const line=(x.copyLine||'').replace(/`/g,''); const terms=(x.terms||[]).slice(0,5).map(t=>`${t.feature}:${Number(t.value??0).toFixed(2)}`).join(' · '); const best=(x.relatedPatterns||[])[0]; return `<div class="row"><div class="left"><div class="symbol">✅ ${x.symbol} <span class="tiny ltr">${x.direction} · ${x.bot||''}</span></div><span class="tiny">PnL ${Number(x.pnl||0).toFixed(3)} · move ${Number(x.movePct||0).toFixed(3)}% · lev ${x.leverage||1}x ${best?`· proof ${best.wins}/${best.games}`:''}</span><div class="eq">${x.equation||''}</div><span class="tiny">${terms}</span></div><button class="copyBtn" onclick='copyText(${JSON.stringify(line)})'>COPY</button></div>`; }
+function renderSuccessLogs(arr){ successLogs=arr||successLogs||[]; const el=$('successLogs'); if(!el) return; el.innerHTML=(successLogs||[]).slice(0,80).map(successLogHTML).join('') || '<div class="muted">لا توجد معادلات ناجحة محفوظة بعد. انتظر إغلاق صفقات وهمية رابحة.</div>'; }
+function addSuccessLog(x){ if(!x) return; successLogs.unshift(x); successLogs=successLogs.slice(0,200); renderSuccessLogs(successLogs); }
+let successLoadTimer=null;
+async function loadSuccessLogs(immediate=true){ clearTimeout(successLoadTimer); const run=async()=>{ try{ const q=encodeURIComponent(($('successSearch')?.value||'').trim()); const d=await api('/formula-success-logs?limit=200'+(q?'&q='+q:'')); renderSuccessLogs(d.logs||[]); }catch(e){ if(immediate) log('success logs failed: '+e.message); } }; if(immediate) successLoadTimer=setTimeout(run,250); else await run(); }
+async function copyAllSuccessLogs(){ try{ const q=encodeURIComponent(($('successSearch')?.value||'').trim()); const d=await api('/formula-success-logs?limit=500'+(q?'&q='+q:'')); await copyText(d.text||''); log('copied '+(d.returned||0)+' successful equation log(s)'); }catch(e){ log('copy all failed: '+e.message); } }
+function openSuccessTxt(){ const q=encodeURIComponent(($('successSearch')?.value||'').trim()); window.open('/formula-success-logs.txt?limit=500'+(q?'&q='+q:''),'_blank'); }
+async function copyText(t){ try{ await navigator.clipboard.writeText(t||''); log('copied to clipboard'); }catch{ const ta=document.createElement('textarea'); ta.value=t||''; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); log('copied'); } }
 function updateRadar(s){ const r=$('radar'); const b=document.createElement('i'); b.className='blip '+(s.hot?'hot':''); const angle=Math.random()*Math.PI*2, rad=35+Math.random()*78; b.style.left=`calc(50% + ${Math.cos(angle)*rad}px)`; b.style.top=`calc(50% + ${Math.sin(angle)*rad}px)`; b.title=s.symbol; r.appendChild(b); setTimeout(()=>b.remove(),4500); }
 async function ownerPost(url){ try{ const r=await api(url,{method:'POST',body:'{}'}); log(url+' ok'); refresh(); }catch(e){ log('OWNER ACTION FAILED: '+e.message); } }
 async function saveConfig(){ const body={ symbols:$('symbols').value.split(/[\s,]+/).filter(Boolean), whaleUsd:+$('whaleUsd').value, minScore:+$('minScore').value, windowSec:+$('windowSec').value, arenaHorizonSec:+$('arenaHorizonSec').value }; try{await api('/config',{method:'POST',body:JSON.stringify(body)}); log('settings saved'); refresh();}catch(e){log('save failed: '+e.message)} }
 async function resetLab(){ if(!confirm('Reset lab?')) return; try{await api('/admin/reset-lab',{method:'POST',body:'{}'}); log('lab reset'); refresh();}catch(e){log('reset failed: '+e.message)} }
-async function exportLab(){ try{ const d=await api('/admin/export'); const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='whale-hunter-lab-export.json'; a.click(); URL.revokeObjectURL(a.href);}catch(e){log('export failed: '+e.message)} }
+async function exportLab(){ try{ const d=await api('/admin/export'); const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='whale-hunter-quant-proof-v14-export.json'; a.click(); URL.revokeObjectURL(a.href);}catch(e){log('export failed: '+e.message)} }
 function toggleSound(){ sound=!sound; $('soundBtn').textContent=sound?'SOUND ON':'SOUND'; if(sound) beep(); }
 function beep(){ try{ const ctx=new (window.AudioContext||window.webkitAudioContext)(); const o=ctx.createOscillator(); const g=ctx.createGain(); o.frequency.value=740; o.connect(g); g.connect(ctx.destination); g.gain.setValueAtTime(.0001,ctx.currentTime); g.gain.exponentialRampToValueAtTime(.16,ctx.currentTime+.02); g.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+.16); o.start(); o.stop(ctx.currentTime+.18); }catch{} }
 if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(()=>{});} checkAuth();

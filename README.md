@@ -1,40 +1,46 @@
-# Whale Hunter Quant Proof V13
+# Whale Hunter Quant Proof V14
 
-لعبة/مختبر مراقبة رياضي على الآيباد. كل عملة من أكبر عملات Binance USDⓈ-M Futures تعتبر مسألة رياضية مستقلة، و500 روبوت علماء يحاولون اكتشاف أنماط صعود/نزول متكررة النجاح.
+Arabic/English game-style Binance USDⓈ-M Futures monitoring lab.
 
-## المهم
+V14 adds a **Successful Equation Logs** dashboard:
 
-- مراقبة وتداول وهمي فقط.
-- لا Binance API keys.
-- لا شراء حقيقي ولا بيع حقيقي.
-- الأسعار والمؤشرات من Binance Futures public WebSocket.
-- التنبيه القوي `PERFECT-SO-FAR` يعني أن النمط لم يفشل داخل سجل اللعبة حتى الآن بعد وصوله إلى عدد تجارب كافٍ. هذا ليس ضمانًا للمستقبل.
+- Every winning paper-trade equation is saved as a copyable log.
+- Dashboard panel: `Successful Equation Logs / سجل المعادلات الناجحة`.
+- One-click copy for each equation.
+- `COPY ALL` copies the filtered successful equations.
+- `OPEN TXT` opens a plain-text log you can select/copy/share.
+- API endpoints:
+  - `GET /formula-success-logs`
+  - `GET /formula-success-logs.txt`
+- Owner export now includes `successfulFormulaLogs`.
 
-## الجديد في V13
+Important: these logs are paper-simulation records only. Prices and market data are real Binance public futures data, but no real orders are placed.
 
-- لوحة دخول بصلاحيات.
-- Owner: تشغيل/إيقاف/تعديل/تصدير/تصفير المختبر.
-- Viewer: مشاهدة فقط بدون تحكم.
-- `/health` خفيف ومناسب لمواقع ping.
-- `/proof` يعرض أنماط 100% داخل السجل.
-- `Coin Proof Lab`: مستوى فهم كل عملة.
-- `Pattern Vault`: سجل نجاح/فشل المعادلات.
-- `Live Math Reports`: تقارير الروبوتات ومعادلاتها لحظيًا.
+## Login codes
 
-## التشغيل
-
-```bash
-npm install
-npm start
-```
-
-ثم افتح:
+Default owner code:
 
 ```text
-http://localhost:3000
+OWNER-7777
 ```
 
-## Render
+Default viewer code:
+
+```text
+VIEW-1111
+```
+
+Change them in Render Environment Variables:
+
+```text
+OWNER_PIN=your-owner-code
+VIEWER_PIN=your-view-code
+AUTH_SECRET=long-random-secret
+MIN_PROOF_SAMPLES=25
+SUCCESS_FORMULA_LOG_MAX=1500
+```
+
+## Deploy on Render
 
 Build Command:
 
@@ -48,60 +54,10 @@ Start Command:
 node server.mjs
 ```
 
-Region المفضل إذا Binance حظر أمريكا: Singapore.
+## Safety
 
-## صلاحيات الدخول
-
-يفضل تغيير الأكواد من Render Environment Variables:
-
-```text
-OWNER_PIN=your-owner-pin
-VIEWER_PIN=your-viewer-pin
-AUTH_SECRET=long-random-secret
-MIN_PROOF_SAMPLES=25
-```
-
-الأكواد الافتراضية للتجربة فقط:
-
-```text
-OWNER-7777
-VIEW-1111
-```
-
-## Endpoints
-
-Public:
-
-```text
-GET /health
-POST /auth/login
-POST /auth/logout
-GET /auth/me
-```
-
-Viewer/Owner:
-
-```text
-GET /events
-GET /state
-GET /hive
-GET /arena
-GET /formulas
-GET /proof
-```
-
-Owner only:
-
-```text
-POST /start
-POST /stop
-POST /scan
-POST /config
-POST /arena/reset
-POST /admin/reset-lab
-GET /admin/export
-```
-
-## تنبيه السلامة
-
-مراقبة فقط. ليست توصية مالية. الرافعة قد تصفّر الحساب. كل الأموال والصفقات داخل اللعبة وهمية.
+- Monitoring and paper-simulation only.
+- No Binance API keys.
+- No real buy/sell orders.
+- No guaranteed profit claims.
+- Visible warning remains: leverage can wipe accounts.

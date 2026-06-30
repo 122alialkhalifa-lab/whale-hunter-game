@@ -1,7 +1,7 @@
 {
-  "name": "whale-hunter-quant-proof",
-  "version": "13.0.0",
-  "description": "Whale Hunter Quant Proof V13: iPad PWA game lab with 500 scientist bots, paper-only leverage sprint, strict perfect-so-far pattern proof, role-based dashboard access, Binance Futures public WebSocket market data only.",
+  "name": "whale-hunter-quant-proof-v14",
+  "version": "14.0.0",
+  "description": "Game-style Binance Futures quant-proof paper arena with successful equation logs.",
   "type": "module",
   "main": "server.mjs",
   "scripts": {

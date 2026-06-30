@@ -37,6 +37,7 @@ const AUTOSTART = String(process.env.AUTOSTART || 'true').toLowerCase() !== 'fal
 const LIVE_HIVE_PUSH_MS = Number(process.env.LIVE_HIVE_PUSH_MS || 3000);
 const HIVE_LEARNING_RATE = Number(process.env.HIVE_LEARNING_RATE || 0.035);
 const HIVE_REPORT_MAX = Number(process.env.HIVE_REPORT_MAX || 220);
+const SUCCESS_FORMULA_LOG_MAX = Number(process.env.SUCCESS_FORMULA_LOG_MAX || 1500);
 const SCIENTIST_THINK_MS = Number(process.env.SCIENTIST_THINK_MS || 1500);
 const LIVE_THINK_SAMPLE = Number(process.env.LIVE_THINK_SAMPLE || 18);
 const MICRO_LEARN_RATE = Number(process.env.MICRO_LEARN_RATE || 0.018);
@@ -140,7 +141,7 @@ app.get('/health', (_req, res) => {
     running,
     scanning,
     timestamp: Date.now(),
-    service: 'Whale Hunter Quant Proof V13',
+    service: 'Whale Hunter Quant Proof V14',
     websocketConnected: wsState.connected,
     publicHealthOnly: true
   });
@@ -192,6 +193,7 @@ app.get('/admin/export', requireOwner, (_req, res) => {
     arena: getArenaSnapshot(),
     hive: getHiveSnapshot(),
     proof: getProofSnapshot(),
+    successfulFormulaLogs: hiveMemory.successFormulaLogs.slice().reverse(),
     lastScan,
     note: 'Paper-simulation data only. No real trades, no API keys.'
   });
@@ -226,6 +228,37 @@ app.get('/formulas', requireViewer, (_req, res) => {
   });
 });
 
+app.get('/formula-success-logs', requireViewer, (req, res) => {
+  const limit = clamp(Number(req.query.limit || 200), 1, SUCCESS_FORMULA_LOG_MAX);
+  const symbol = String(req.query.symbol || '').trim().toUpperCase();
+  const q = String(req.query.q || '').trim().toUpperCase();
+  let logs = hiveMemory.successFormulaLogs.slice().reverse();
+  if (symbol) logs = logs.filter(x => x.symbol === symbol);
+  if (q) logs = logs.filter(x => JSON.stringify(x).toUpperCase().includes(q));
+  logs = logs.slice(0, limit);
+  res.json({
+    ok: true,
+    count: hiveMemory.successFormulaLogs.length,
+    returned: logs.length,
+    logs,
+    text: logs.map(formatSuccessLogLine).join('\n'),
+    note: 'Successful equation logs are paper-simulation records only. Copy/export them before a free host restarts if you need permanent history.',
+    timestamp: Date.now()
+  });
+});
+
+app.get('/formula-success-logs.txt', requireViewer, (req, res) => {
+  const limit = clamp(Number(req.query.limit || 500), 1, SUCCESS_FORMULA_LOG_MAX);
+  const symbol = String(req.query.symbol || '').trim().toUpperCase();
+  const q = String(req.query.q || '').trim().toUpperCase();
+  let logs = hiveMemory.successFormulaLogs.slice().reverse();
+  if (symbol) logs = logs.filter(x => x.symbol === symbol);
+  if (q) logs = logs.filter(x => JSON.stringify(x).toUpperCase().includes(q));
+  logs = logs.slice(0, limit);
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.send(logs.map(formatSuccessLogBlock).join('\n\n---\n\n') || 'No successful equation logs yet.');
+});
+
 app.get('/state', requireViewer, (_req, res) => {
   res.json({
     ok: true,
@@ -236,6 +269,7 @@ app.get('/state', requireViewer, (_req, res) => {
     livingScientistLoop: true,
     tenMinuteLeverageSprint: true,
     quantProofV13: true,
+    successFormulaLogsV14: true,
     accessControl: true,
     minProofSamples: MIN_PROOF_SAMPLES,
     perfectAlertOnly: PERFECT_ALERT_ONLY,
@@ -1450,6 +1484,7 @@ function createHiveMemory() {
     reviews: [],
     broadcasts: [],
     formulaReports: [],
+    successfulFormulaLogs: [],
     scientistDebates: [],
     liveThoughts: [],
     mathWeights: new Map(),
@@ -1471,6 +1506,7 @@ function resetHiveMemory() {
   hiveMemory.reviews = [];
   hiveMemory.broadcasts = [];
   hiveMemory.formulaReports = [];
+  hiveMemory.successFormulaLogs = [];
   hiveMemory.scientistDebates = [];
   hiveMemory.liveThoughts = [];
   hiveMemory.mathWeights = new Map();
@@ -1853,6 +1889,7 @@ function recordHiveOutcome(contestant, prediction, outcome, signal) {
 
   const formulaReport = createOutcomeFormulaReport(contestant, prediction, outcome, signal);
   pushScientistReport(formulaReport);
+  if (win) pushSuccessfulFormulaLog(buildSuccessfulFormulaLog(contestant, prediction, outcome, signal, formulaReport, keys));
   applyCollectiveMathLearning(formulaReport);
 
   if (outcome.selfReview) {
@@ -2015,6 +2052,93 @@ function createOutcomeFormulaReport(contestant, prediction, outcome, signal) {
       ? `الخلية سترفع وزن الحدود التي ظهرت قبل نجاح ${prediction.symbol}.`
       : `الخلية ستخفض أو تعكس وزن الحدود التي سبقت فشل ${prediction.symbol}.`
   };
+}
+
+
+function buildSuccessfulFormulaLog(contestant, prediction, outcome, signal, formulaReport, keys = []) {
+  const now = Date.now();
+  const pnl = Number(outcome.paperResult?.netPnl ?? 0);
+  const movePct = Number(outcome.movePct || 0);
+  const tags = (prediction.signalSnapshot?.tags || prediction.signalTags || []).slice(0, 8);
+  const relatedPatterns = keys.map(key => {
+    const st = hiveMemory.patternStats.get(key);
+    if (!st) return null;
+    return {
+      key,
+      wins: st.wins,
+      losses: st.losses,
+      games: st.games,
+      winRate: Number((st.wins / Math.max(1, st.games) * 100).toFixed(2)),
+      pnl: Number(st.pnl.toFixed(2)),
+      perfectSoFar: st.games >= MIN_PROOF_SAMPLES && st.losses === 0 && st.wins > 0
+    };
+  }).filter(Boolean).sort((a, b) => (b.perfectSoFar - a.perfectSoFar) || b.games - a.games || b.winRate - a.winRate).slice(0, 8);
+  const entry = {
+    id: randomUUID(),
+    timestamp: now,
+    isoTime: new Date(now).toISOString(),
+    symbol: prediction.symbol,
+    direction: prediction.direction,
+    bot: contestant.callsign,
+    botId: contestant.id,
+    style: contestant.style.name,
+    styleKey: contestant.style.key,
+    result: 'WIN',
+    hit: outcome.hit,
+    pnl: Number(pnl.toFixed(4)),
+    movePct: Number(movePct.toFixed(4)),
+    entryPrice: prediction.entryPrice,
+    exitPrice: outcome.paperResult?.exitPrice ?? null,
+    leverage: prediction.paperTrade?.leverage || 1,
+    notional: Number(outcome.paperResult?.notional || prediction.paperTrade?.notional || 0),
+    conviction: Number(prediction.conviction || 0),
+    equation: formulaReport?.equation || prediction.formula?.equation || 'R = sign(PnL)·(|move|+|PnL|); Δwᵢ = η·R·xᵢ',
+    decisionEquation: prediction.formula?.equation || null,
+    latex: formulaReport?.latex || null,
+    reward: formulaReport?.reward ?? null,
+    terms: (formulaReport?.terms || []).slice(0, 10),
+    tags,
+    relatedPatterns,
+    copyLine: '',
+    copyBlock: ''
+  };
+  entry.copyLine = formatSuccessLogLine(entry);
+  entry.copyBlock = formatSuccessLogBlock(entry);
+  return entry;
+}
+
+function pushSuccessfulFormulaLog(entry) {
+  if (!entry) return;
+  pushLimited(hiveMemory.successFormulaLogs, entry, SUCCESS_FORMULA_LOG_MAX);
+  broadcast('success-log', { log: entry, count: hiveMemory.successFormulaLogs.length, timestamp: Date.now() });
+}
+
+function formatSuccessLogLine(x) {
+  const t = x.isoTime || new Date(x.timestamp || Date.now()).toISOString();
+  const best = x.relatedPatterns?.[0];
+  const proof = best ? `pattern=${best.wins}/${best.games}${best.losses === 0 ? ' PERFECT_SO_FAR' : ''}` : 'pattern=n/a';
+  return `[${t}] ${x.symbol} ${x.direction} | ${x.bot} ${x.styleKey} | WIN pnl=${Number(x.pnl||0).toFixed(4)} move=${Number(x.movePct||0).toFixed(4)}% lev=${x.leverage}x | ${proof} | equation: ${x.equation}`;
+}
+
+function formatSuccessLogBlock(x) {
+  const best = x.relatedPatterns?.[0];
+  const terms = (x.terms || []).map(t => `  - ${t.feature}: value=${t.value ?? ''} gradient=${t.gradient ?? ''}`).join('\n');
+  const patterns = (x.relatedPatterns || []).map(p => `  - ${p.key}: wins=${p.wins}, losses=${p.losses}, games=${p.games}, winRate=${p.winRate}%, perfect=${p.perfectSoFar}`).join('\n');
+  return [
+    `SUCCESS EQUATION LOG`,
+    `Time: ${x.isoTime || new Date(x.timestamp || Date.now()).toISOString()}`,
+    `Symbol: ${x.symbol}`,
+    `Direction: ${x.direction}`,
+    `Bot: ${x.bot} / ${x.style}`,
+    `Result: WIN | PnL=${Number(x.pnl||0).toFixed(4)} | Move=${Number(x.movePct||0).toFixed(4)}% | Leverage=${x.leverage}x`,
+    `Equation: ${x.equation}`,
+    x.decisionEquation ? `Decision equation: ${x.decisionEquation}` : null,
+    best ? `Best related proof: ${best.key} => ${best.wins}/${best.games}, losses=${best.losses}, winRate=${best.winRate}%` : null,
+    `Terms:\n${terms || '  - none'}`,
+    `Related patterns:\n${patterns || '  - none'}`,
+    `Tags: ${(x.tags || []).join(', ') || 'none'}`,
+    `Note: paper-simulation only; not financial advice; no real trade was placed.`
+  ].filter(Boolean).join('\n');
 }
 
 function pushScientistReport(report) {
@@ -2306,6 +2430,8 @@ function getHiveSnapshot() {
     mathConsensus: getMathConsensus(),
     topWeights: getTopMathWeights(14),
     totalFormulaReports: hiveMemory.totalFormulaReports,
+    successfulFormulaLogCount: hiveMemory.successFormulaLogs.length,
+    successfulFormulaLogs: hiveMemory.successFormulaLogs.slice(-18).reverse(),
     totalLiveThoughts: hiveMemory.totalLiveThoughts,
     livingPulseMs: SCIENTIST_THINK_MS,
     collectiveVersion: hiveMemory.collectiveVersion,
@@ -2748,6 +2874,6 @@ app.listen(PORT, () => {
     running = true;
     scheduleNextScan(9000);
   }
-  log('server', `Whale Hunter Quant Proof Scientists V13 online on port ${PORT}. Server-side autonomous quant-proof fake-leverage sprint: 500 bots, $1000 fake each, ALL Binance WebSocket mode. Page is viewer only. Monitoring only. No API keys. No real trading.`);
+  log('server', `Whale Hunter Quant Proof Scientists V14 online on port ${PORT}. Server-side autonomous quant-proof fake-leverage sprint: 500 bots, $1000 fake each, ALL Binance WebSocket mode. Page is viewer only. Monitoring only. No API keys. No real trading.`);
   broadcast('status', { running, scanning, autostart: AUTOSTART, timestamp: Date.now() });
 });
