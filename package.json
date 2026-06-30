@@ -1,0 +1,32 @@
+{
+  "name": "whale-hunter-radar",
+  "version": "4.0.0",
+  "description": "Game-first iPad PWA for Binance USD-M Futures whale-flow monitoring with 500 autonomous robot contestants. Monitoring only, no trading.",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "keywords": [
+    "binance",
+    "futures",
+    "pwa",
+    "sse",
+    "radar",
+    "monitoring",
+    "game",
+    "prediction-arena",
+    "autonomous-bots",
+    "bot-arena",
+    "robot-swarm"
+  ],
+  "author": "",
+  "license": "MIT"
+}
