@@ -1,49 +1,47 @@
-# Whale Hunter Bitcoin Quant Proof V16
+# Whale Hunter Radar — Bitcoin Two Formula Only V17
 
-Bitcoin-only edition.
+نسخة BTCUSDT فقط، مقفلة على معادلتين فقط كما طلبت. لا يوجد أي نموذج ثالث ولا تجربة استراتيجية جديدة.
 
-Everything is locked to **BTCUSDT**:
+## المعادلتان المسموحتان حرفيًا
 
-- 500 scientist bots
-- paper/fake $1000 balances
-- fake leverage simulation
-- mathematical pattern proof engine
-- Perfect-So-Far alerts
-- Successful Equation Logs
-- dashboard access permissions
-- `/formula-success-logs` and `/formula-success-logs.txt`
-
-Market data source:
-
-- Real Binance USDⓈ-M Futures WebSocket data for `BTCUSDT@aggTrade`
-- Prices, trade flow, buy/sell pressure, and indicators are calculated from real public market data.
-- Paper positions, PnL, fake USD, and leverage are simulation only.
-
-## Login codes
-
-Default owner code:
+### 1) BTCUSDT DOWN — DOGFIGHT — 8x
 
 ```text
-OWNER-7777
+[2026-06-30T22:38:22.424Z] BTCUSDT DOWN | Radar-013 المرصاد DOGFIGHT | WIN net=0.5379% gross=1.4970% fees+slip=0.9591% move=-0.1871% lev=8x | pattern=1/1 PERFECT_SO_FAR | equation: gross=1.4970% - fees=0.6394% - slippage=0.3197% => net=0.5379%; result=WIN; R=0.7250; Δwᵢ=η·R·xᵢ
 ```
 
-Default viewer code:
+### 2) BTCUSDT UP — TAKER_BUY — 12.3x
 
 ```text
-VIEW-1111
+[2026-06-30T22:08:20.304Z] BTCUSDT UP | Radar-001 الغواص TAKER_BUY | WIN net=0.6171% gross=2.0943% fees+slip=1.4772% move=0.1703% lev=12.3x | pattern=1/1 PERFECT_SO_FAR | equation: gross=2.0943% - fees=0.9848% - slippage=0.4924% => net=0.6171%; result=WIN; R=0.7874; Δwᵢ=η·R·xᵢ
 ```
 
-Change them in Render Environment Variables:
+## منطق التداول الوهمي
 
-```text
-OWNER_PIN=your-owner-code
-VIEWER_PIN=your-view-code
-AUTH_SECRET=long-random-secret
-MIN_PROOF_SAMPLES=25
-SUCCESS_FORMULA_LOG_MAX=1500
+- اللعبة تستخدم BTCUSDT فقط.
+- السيرفر يقرأ Binance Futures WebSocket الحقيقي لـ `btcusdt@aggTrade`.
+- التداول وهمي بالكامل داخل اللعبة.
+- لا API keys.
+- لا أوامر شراء أو بيع حقيقية.
+- لا يوجد auto-trading حقيقي.
+- كل جولة تفتح فقط صيغتين وهميتين: UP/TAKER_BUY و DOWN/DOGFIGHT.
+- الرافعة ثابتة حسب المعادلة:
+  - UP = 12.3x
+  - DOWN = 8x
+- التقييم صار Strict:
+  - WATCH لا يحسب win.
+  - الربح لا يحسب win إلا بعد الرسوم والانزلاق.
+  - `R = 0` إذا النتيجة NEUTRAL أو WATCH.
+  - `TRADE_PROOF = real_wins / real_closed_trials` فقط.
+
+## تشغيل
+
+```bash
+npm install
+npm start
 ```
 
-## Deploy on Render
+## Render
 
 Build Command:
 
@@ -57,53 +55,40 @@ Start Command:
 node server.mjs
 ```
 
-## Health check
+## Access
 
-Use this for cron-job.org or uptime ping:
+Default owner PIN:
+
+```text
+OWNER-7777
+```
+
+Default viewer PIN:
+
+```text
+VIEW-1111
+```
+
+غيّرها من Render Environment Variables:
+
+```text
+OWNER_PIN=your-owner-pin
+VIEWER_PIN=your-viewer-pin
+AUTH_SECRET=long-secret
+```
+
+## Health
 
 ```text
 /health
 ```
 
-You want to see:
+لازم تشوف:
 
 ```json
-{ "ok": true, "websocketConnected": true }
+{"ok":true,"websocketConnected":true,"twoFormulaOnlyMode":true}
 ```
 
 ## Safety
 
-- Monitoring and paper-simulation only.
-- No Binance API keys.
-- No real buy/sell orders.
-- No guaranteed profit claims.
-- Visible warning remains: leverage can wipe accounts.
-- `100%` means perfect inside the app's recorded paper-simulation history so far, not guaranteed future profit.
-
-## V16 Strict Evaluation Fixes
-
-This version fixes the evaluation logic, not only the message text.
-
-- `WATCH_SCORE` is separated from `TRADE_PROOF`.
-- WATCH-only decisions never count as wins.
-- A paper trade only becomes `WIN` when net PnL after fees and slippage is greater than `MIN_NET_PROFIT_PCT`.
-- Neutral trades are closed trials but not wins.
-- `PERFECT-SO-FAR` means `wins === real_closed_trials` with zero losses and zero neutral trials after the minimum sample count.
-- Learning reward uses strict net result:
-
-```text
-if result == WIN:  R = abs(move) + abs(netPnL%)
-if result == LOSS: R = -(abs(move) + abs(netPnL%))
-else:              R = 0
-```
-
-- Duplicate BTCUSDT setups with the same timeframe, direction, feature vector, and time bucket are not counted repeatedly in proof stats.
-
-Optional Render Environment Variables:
-
-```text
-PAPER_FEE_BPS=4
-PAPER_SLIPPAGE_BPS=2
-MIN_NET_PROFIT_PCT=0.05
-MAX_NEUTRAL_LOSS_PCT=0.05
-```
+مراقبة وتداول وهمي فقط. ليست توصية مالية. الرافعة قد تصفّر الحساب الحقيقي.

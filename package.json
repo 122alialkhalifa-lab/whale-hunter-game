@@ -1,7 +1,7 @@
 {
-  "name": "whale-hunter-bitcoin-quant-proof-v16",
-  "version": "16.0.0",
-  "description": "Bitcoin-only game-style Binance Futures quant-proof paper arena with successful equation logs and access control.",
+  "name": "whale-hunter-bitcoin-two-formula-v17",
+  "version": "17.0.0",
+  "description": "Bitcoin-only Binance Futures paper arena locked to exactly two user-approved formulas: BTCUSDT UP TAKER_BUY and BTCUSDT DOWN DOGFIGHT.",
   "type": "module",
   "main": "server.mjs",
   "scripts": {
@@ -21,15 +21,13 @@
     "binance-futures",
     "pwa",
     "sse",
-    "radar",
-    "monitoring",
     "paper-trading-simulation",
     "fake-money",
-    "scientist-bots",
-    "mathematical-learning",
-    "perfect-pattern",
-    "access-control",
-    "dashboard-permissions"
+    "two-formula-only",
+    "fixed-formula",
+    "strict-evaluation",
+    "no-api-keys",
+    "no-real-trading"
   ],
   "license": "MIT"
 }

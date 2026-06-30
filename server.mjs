@@ -23,6 +23,32 @@ const BINANCE_WS_DISCOVERY_URL = 'wss://fstream.binance.com/market/ws/!miniTicke
 const ALL_SYMBOLS_SENTINEL = 'ALL_BINANCE_USDT';
 const BTC_ONLY_SYMBOL = 'BTCUSDT';
 const BITCOIN_ONLY_MODE = true;
+const TWO_FORMULA_ONLY_MODE = true;
+const FIXED_FORMULA_LIBRARY = Object.freeze({
+  UP_TAKER_BUY: {
+    id: 'UP_TAKER_BUY_RADAR_001',
+    styleKey: 'TAKER_BUY',
+    originalBot: 'Radar-001 الغواص',
+    direction: 'UP',
+    side: 'LONG',
+    leverage: 12.3,
+    originalLine: '[2026-06-30T22:08:20.304Z] BTCUSDT UP | Radar-001 الغواص TAKER_BUY | WIN net=0.6171% gross=2.0943% fees+slip=1.4772% move=0.1703% lev=12.3x | pattern=1/1 PERFECT_SO_FAR | equation: gross=2.0943% - fees=0.9848% - slippage=0.4924% => net=0.6171%; result=WIN; R=0.7874; Δwᵢ=η·R·xᵢ',
+    equation: 'gross=2.0943% - fees=0.9848% - slippage=0.4924% => net=0.6171%; result=WIN; R=0.7874; Δwᵢ=η·R·xᵢ',
+    entryNote: 'Fixed formula only: BTCUSDT UP / TAKER_BUY / leverage 12.3x.'
+  },
+  DOWN_DOGFIGHT: {
+    id: 'DOWN_DOGFIGHT_RADAR_013',
+    styleKey: 'DOGFIGHT',
+    originalBot: 'Radar-013 المرصاد',
+    direction: 'DOWN',
+    side: 'SHORT',
+    leverage: 8,
+    originalLine: '[2026-06-30T22:38:22.424Z] BTCUSDT DOWN | Radar-013 المرصاد DOGFIGHT | WIN net=0.5379% gross=1.4970% fees+slip=0.9591% move=-0.1871% lev=8x | pattern=1/1 PERFECT_SO_FAR | equation: gross=1.4970% - fees=0.6394% - slippage=0.3197% => net=0.5379%; result=WIN; R=0.7250; Δwᵢ=η·R·xᵢ',
+    equation: 'gross=1.4970% - fees=0.6394% - slippage=0.3197% => net=0.5379%; result=WIN; R=0.7250; Δwᵢ=η·R·xᵢ',
+    entryNote: 'Fixed formula only: BTCUSDT DOWN / DOGFIGHT / leverage 8x.'
+  }
+});
+const FIXED_FORMULAS = Object.freeze([FIXED_FORMULA_LIBRARY.UP_TAKER_BUY, FIXED_FORMULA_LIBRARY.DOWN_DOGFIGHT]);
 const MAX_SYMBOLS = 1;
 const WS_SUBSCRIBE_CHUNK = Number(process.env.WS_SUBSCRIBE_CHUNK || 180);
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 9000);
@@ -60,7 +86,7 @@ const defaultConfig = Object.freeze({
   windowSec: 60,
   intervalSec: 5,
   arenaHorizonSec: 600,
-  maxFakeLeverage: MAX_FAKE_LEVERAGE
+  maxFakeLeverage: 12.3
 });
 
 const strategyDeck = Object.freeze([
@@ -144,9 +170,11 @@ app.get('/health', (_req, res) => {
   res.json({
     ok: true,
     running,
+    twoFormulaOnlyMode: TWO_FORMULA_ONLY_MODE,
+    fixedFormulas: fixedFormulaStatus(),
     scanning,
     timestamp: Date.now(),
-    service: 'Whale Hunter Bitcoin Quant Proof V16 Strict Evaluation',
+    service: 'Whale Hunter Bitcoin Two Formula Only V17',
     websocketConnected: wsState.connected,
     publicHealthOnly: true
   });
@@ -268,6 +296,8 @@ app.get('/state', requireViewer, (_req, res) => {
   res.json({
     ok: true,
     running,
+    twoFormulaOnlyMode: TWO_FORMULA_ONLY_MODE,
+    fixedFormulas: fixedFormulaStatus(),
     serverSideAutonomous: true,
     pageIsOnlyViewer: true,
     scientistHiveV11: true,
@@ -317,6 +347,8 @@ app.get('/events', requireViewer, (req, res) => {
   sendSse(client, 'hello', {
     ok: true,
     running,
+    twoFormulaOnlyMode: TWO_FORMULA_ONLY_MODE,
+    fixedFormulas: fixedFormulaStatus(),
     scanning,
     timestamp: Date.now(),
     config,
@@ -482,6 +514,8 @@ async function runScan({ manual = false } = {}) {
       durationMs: Date.now() - startedAt,
       manual,
       running,
+    twoFormulaOnlyMode: TWO_FORMULA_ONLY_MODE,
+    fixedFormulas: fixedFormulaStatus(),
       config: cfg,
       results: [],
       hotCount: 0,
@@ -529,6 +563,8 @@ async function runScan({ manual = false } = {}) {
     durationMs: finishedAt - startedAt,
     manual,
     running,
+    twoFormulaOnlyMode: TWO_FORMULA_ONLY_MODE,
+    fixedFormulas: fixedFormulaStatus(),
     config: { ...cfg, activeSymbols: scanSymbols, activeSymbolCount: scanSymbols.length },
     results,
     hotCount: hot.length,
@@ -631,6 +667,31 @@ async function scanSymbol(symbol, cfg) {
   };
 }
 
+
+function getFixedFormulaByStyleKey(styleKey) {
+  return FIXED_FORMULAS.find(f => f.styleKey === styleKey) || null;
+}
+
+function getFixedFormulaByDirection(direction) {
+  return FIXED_FORMULAS.find(f => f.direction === direction) || null;
+}
+
+function getFixedFormulaContestant(styleKey) {
+  return contestants.find(bot => bot.style?.key === styleKey) || null;
+}
+
+function fixedFormulaStatus() {
+  return FIXED_FORMULAS.map(f => ({
+    id: f.id,
+    styleKey: f.styleKey,
+    originalBot: f.originalBot,
+    direction: f.direction,
+    leverage: f.leverage,
+    equation: f.equation,
+    originalLine: f.originalLine
+  }));
+}
+
 function updateArena(results, cfg, now) {
   const bySymbol = new Map(results.map(signal => [signal.symbol, signal]));
   const resolvedThisScan = [];
@@ -651,22 +712,38 @@ function updateArena(results, cfg, now) {
   if (resolvedPredictions.length > 2500) resolvedPredictions = resolvedPredictions.slice(-2500);
 
   const activeContestants = new Set(activePredictions.map(item => item.contestantId));
+  const activeFormulaKeys = new Set(activePredictions.map(item => item.fixedFormulaId).filter(Boolean));
   const createdThisScan = [];
 
   if (Array.isArray(results) && results.length) {
-    for (const contestant of contestants) {
-      if (activeContestants.has(contestant.id)) continue;
-      const prediction = createPrediction(contestant, results, cfg, now);
-      if (!prediction) continue;
-      contestant.pending += 1;
-      activePredictions.push(prediction);
-      activeContestants.add(contestant.id);
-      createdThisScan.push(prediction);
+    if (TWO_FORMULA_ONLY_MODE) {
+      for (const fixedFormula of FIXED_FORMULAS) {
+        if (activeFormulaKeys.has(fixedFormula.id)) continue;
+        const contestant = getFixedFormulaContestant(fixedFormula.styleKey);
+        if (!contestant || activeContestants.has(contestant.id)) continue;
+        const prediction = createPrediction(contestant, results, cfg, now, fixedFormula);
+        if (!prediction) continue;
+        contestant.pending += 1;
+        activePredictions.push(prediction);
+        activeContestants.add(contestant.id);
+        activeFormulaKeys.add(fixedFormula.id);
+        createdThisScan.push(prediction);
+      }
+    } else {
+      for (const contestant of contestants) {
+        if (activeContestants.has(contestant.id)) continue;
+        const prediction = createPrediction(contestant, results, cfg, now);
+        if (!prediction) continue;
+        contestant.pending += 1;
+        activePredictions.push(prediction);
+        activeContestants.add(contestant.id);
+        createdThisScan.push(prediction);
+      }
     }
   }
 
   if (createdThisScan.length) {
-    log('arena', `${createdThisScan.length} contestants locked new ${formatDuration(cfg.arenaHorizonSec)} watch predictions.`);
+    log('arena', TWO_FORMULA_ONLY_MODE ? `Two fixed formulas opened ${createdThisScan.length} repeated paper trade(s) for ${formatDuration(cfg.arenaHorizonSec)}.` : `${createdThisScan.length} contestants locked new ${formatDuration(cfg.arenaHorizonSec)} watch predictions.`);
   }
   if (resolvedThisScan.length) {
     const wins = resolvedThisScan.filter(item => item.hit).length;
@@ -676,7 +753,7 @@ function updateArena(results, cfg, now) {
   return getArenaSnapshot({ createdThisScan, resolvedThisScan });
 }
 
-function createPrediction(contestant, results, cfg, now) {
+function createPrediction(contestant, results, cfg, now, fixedFormulaOverride = null) {
   let best = null;
   for (const signal of results) {
     if (!signal.price) continue;
@@ -686,13 +763,17 @@ function createPrediction(contestant, results, cfg, now) {
   if (!best) return null;
 
   const { signal, reading } = best;
-  const direction = reading.direction;
+  const fixedFormula = fixedFormulaOverride || reading.fixedFormula || getFixedFormulaByStyleKey(contestant.style?.key);
+  const direction = fixedFormula?.direction || reading.direction;
   const prediction = {
     id: randomUUID(),
     contestantId: contestant.id,
     callsign: contestant.callsign,
     style: contestant.style.name,
     styleKey: contestant.style.key,
+    fixedFormulaId: fixedFormula?.id || null,
+    sourceFormulaOriginalLine: fixedFormula?.originalLine || null,
+    sourceFormulaEquation: fixedFormula?.equation || null,
     styleAr: contestant.style.ar,
     indicator: contestant.style.indicator,
     symbol: signal.symbol,
@@ -735,10 +816,50 @@ function readSignal(contestant, signal, cfg) {
   const heavy = /^(BTC|ETH|SOL)USDT$/.test(signal.symbol) ? 1 : 0;
   const alt = heavy ? 0 : 1;
   const variant = contestant.variant;
+  const fixedFormula = TWO_FORMULA_ONLY_MODE ? getFixedFormulaByStyleKey(contestant.style?.key) : null;
 
   let conviction = 25;
-  let direction = contestant.style.direction;
-  let basis = contestant.style.desc;
+  let direction = fixedFormula?.direction || contestant.style.direction;
+  let basis = fixedFormula?.entryNote || contestant.style.desc;
+
+  if (fixedFormula) {
+    // In Two Formula Only Mode, the game is not allowed to invent new strategies.
+    // It repeatedly opens only the two user-approved BTCUSDT formula templates.
+    const directionalPressure = fixedFormula.direction === 'UP'
+      ? buyPct + Math.max(0, lift) * 18 + buyUnits * 5 - sellUnits * 2
+      : (100 - buyPct) + Math.max(0, -lift) * 18 + sellUnits * 5 - buyUnits * 2;
+    conviction = clamp(Math.round(62 + score * 0.18 + directionalPressure * 0.18), 55, 100);
+    const formula = {
+      equation: fixedFormula.originalLine,
+      latex: fixedFormula.direction === 'UP'
+        ? 'BTCUSDT\ UP:\ gross=2.0943\%-fees=0.9848\%-slippage=0.4924\%\Rightarrow net=0.6171\%'
+        : 'BTCUSDT\ DOWN:\ gross=1.4970\%-fees=0.6394\%-slippage=0.3197\%\Rightarrow net=0.5379\%',
+      raw: null,
+      pressure: conviction,
+      terms: [
+        { feature: 'FIXED_FORMULA', w: 1, value: 1, product: 1 },
+        { feature: fixedFormula.styleKey, w: 1, value: 1, product: 1 },
+        { feature: 'BTCUSDT_ONLY', w: 1, value: 1, product: 1 }
+      ],
+      vector: featureVectorFromSignal(signal),
+      baseStyle: fixedFormula.styleKey,
+      finalConviction: conviction,
+      finalDirection: fixedFormula.direction,
+      fixedFormulaId: fixedFormula.id,
+      fixedFormulaOriginalLine: fixedFormula.originalLine,
+      fixedFormulaEquation: fixedFormula.equation,
+      fixedLeverage: fixedFormula.leverage
+    };
+    return {
+      conviction,
+      direction: fixedFormula.direction,
+      basis: `${fixedFormula.entryNote} Original equation locked حرفيًا.`,
+      hiveContext: { boost: 0, note: 'fixed formula only' },
+      mathContext: { boost: 0, note: 'no invented model' },
+      formula,
+      fixedFormula
+    };
+  }
 
   switch (contestant.style.key) {
     case 'TAKER_BUY':
@@ -1107,13 +1228,17 @@ function createContestants(count) {
   const arabic = ['الغواص', 'الصياد', 'المرصاد', 'النورس', 'القبطان', 'القناص', 'الحارس', 'الملاح', 'الرادار', 'الكشاف'];
   return Array.from({ length: count }, (_, idx) => {
     const id = idx + 1;
-    const style = strategyDeck[idx % strategyDeck.length];
+    const fixed = FIXED_FORMULAS[idx % FIXED_FORMULAS.length];
+    const style = TWO_FORMULA_ONLY_MODE
+      ? strategyDeck.find(item => item.key === fixed.styleKey) || strategyDeck[0]
+      : strategyDeck[idx % strategyDeck.length];
     const prefix = prefixes[idx % prefixes.length];
     const ar = arabic[idx % arabic.length];
     return {
       id,
       callsign: `${prefix}-${String(id).padStart(3, '0')} ${ar}`,
       style,
+      fixedFormulaId: TWO_FORMULA_ONLY_MODE ? fixed.id : null,
       variant: ((idx * 7) % 11) - 5,
       risk: ((idx * 13) % 17) - 8,
       minConviction: 42 + ((idx * 5) % 20),
@@ -1182,6 +1307,8 @@ function startLiveHiveLoop() {
     const payload = {
       timestamp: Date.now(),
       running,
+    twoFormulaOnlyMode: TWO_FORMULA_ONLY_MODE,
+    fixedFormulas: fixedFormulaStatus(),
       hive: getHiveSnapshot(),
       arena: getArenaSnapshot(),
       botSwarm: getBotSwarm()
@@ -1752,6 +1879,8 @@ function updateSymbolBrain(symbol, direction, before, movePct) {
 }
 
 function chooseFakeLeverage(contestant, prediction, signal) {
+  const fixedFormula = getFixedFormulaByStyleKey(contestant.style?.key) || getFixedFormulaByDirection(prediction.direction);
+  if (TWO_FORMULA_ONLY_MODE && fixedFormula) return fixedFormula.leverage;
   if (!['UP', 'DOWN'].includes(prediction.direction)) return 1;
   const maxLev = Math.max(1, Number(config.maxFakeLeverage || MAX_FAKE_LEVERAGE));
   const conviction = Number(prediction.conviction || 0);
@@ -1811,6 +1940,9 @@ function openPaperTrade(contestant, prediction, signal, now) {
     strategy: contestant.style.key,
     tags: [...(prediction.signalTags || [])],
     basis: prediction.basis,
+    fixedFormulaId: prediction.fixedFormulaId || null,
+    sourceFormulaOriginalLine: prediction.sourceFormulaOriginalLine || null,
+    sourceFormulaEquation: prediction.sourceFormulaEquation || null,
     sprintObjective: 'أعلى ربح وهمي خلال 10 دقائق بأسرع وقت مع تحمل خطر التصفية الوهمية'
   };
   contestant.cash = Math.max(0, contestant.cash - margin - fee - entrySlippage);
@@ -2112,6 +2244,9 @@ function buildDecisionEquation(contestant, signal, ctx = {}) {
   const strongest = terms.slice().sort((a, b) => Math.abs(b.product) - Math.abs(a.product)).slice(0, 5);
   return {
     equation,
+    sourceFormulaOriginalLine: prediction.sourceFormulaOriginalLine || null,
+    sourceFormulaEquation: prediction.sourceFormulaEquation || null,
+    fixedFormulaId: prediction.fixedFormulaId || null,
     latex,
     raw: Number(raw.toFixed(4)),
     pressure,
@@ -2136,11 +2271,17 @@ function createDecisionFormulaReport(contestant, prediction, signal, reading, no
     callsign: contestant.callsign,
     style: contestant.style.name,
     styleKey: contestant.style.key,
+    fixedFormulaId: fixedFormula?.id || null,
+    sourceFormulaOriginalLine: fixedFormula?.originalLine || null,
+    sourceFormulaEquation: fixedFormula?.equation || null,
     styleAr: contestant.style.ar,
     symbol: prediction.symbol,
     direction: prediction.direction,
     conviction: prediction.conviction,
     equation: formula.equation,
+    sourceFormulaOriginalLine: prediction.sourceFormulaOriginalLine || formula.fixedFormulaOriginalLine || null,
+    sourceFormulaEquation: prediction.sourceFormulaEquation || formula.fixedFormulaEquation || null,
+    fixedFormulaId: prediction.fixedFormulaId || formula.fixedFormulaId || null,
     latex: formula.latex,
     terms: formula.terms,
     vector: formula.vector,
@@ -2197,6 +2338,9 @@ function createOutcomeFormulaReport(contestant, prediction, outcome, signal) {
     direction: prediction.direction,
     conviction: prediction.conviction,
     equation,
+    sourceFormulaOriginalLine: prediction.sourceFormulaOriginalLine || null,
+    sourceFormulaEquation: prediction.sourceFormulaEquation || null,
+    fixedFormulaId: prediction.fixedFormulaId || null,
     latex,
     terms,
     vector,
@@ -2269,6 +2413,9 @@ function buildSuccessfulFormulaLog(contestant, prediction, outcome, signal, form
     notional: Number(outcome.paperResult?.notional || prediction.paperTrade?.notional || 0),
     conviction: Number(prediction.conviction || 0),
     equation: formulaReport?.equation || prediction.formula?.equation || 'R = sign(PnL)·(|move|+|PnL|); Δwᵢ = η·R·xᵢ',
+    sourceFormulaOriginalLine: prediction.sourceFormulaOriginalLine || formulaReport?.sourceFormulaOriginalLine || null,
+    sourceFormulaEquation: prediction.sourceFormulaEquation || formulaReport?.sourceFormulaEquation || null,
+    fixedFormulaId: prediction.fixedFormulaId || formulaReport?.fixedFormulaId || null,
     decisionEquation: prediction.formula?.equation || null,
     latex: formulaReport?.latex || null,
     reward: formulaReport?.reward ?? null,
@@ -2295,7 +2442,7 @@ function formatSuccessLogLine(x) {
   const t = x.isoTime || new Date(x.timestamp || Date.now()).toISOString();
   const best = x.relatedPatterns?.[0];
   const proof = best ? `pattern=${best.wins}/${best.games}${best.losses === 0 ? ' PERFECT_SO_FAR' : ''}` : 'pattern=n/a';
-  return `[${t}] ${x.symbol} ${x.direction} | ${x.bot} ${x.styleKey} | WIN net=${Number(x.netPnlPct||0).toFixed(4)}% gross=${Number(x.grossPnlPct||0).toFixed(4)}% fees+slip=${(Number(x.feesPct||0)+Number(x.slippagePct||0)).toFixed(4)}% move=${Number(x.movePct||0).toFixed(4)}% lev=${x.leverage}x | ${proof} | equation: ${x.equation}`;
+  return `[${t}] ${x.symbol} ${x.direction} | ${x.bot} ${x.styleKey} | WIN net=${Number(x.netPnlPct||0).toFixed(4)}% gross=${Number(x.grossPnlPct||0).toFixed(4)}% fees+slip=${(Number(x.feesPct||0)+Number(x.slippagePct||0)).toFixed(4)}% move=${Number(x.movePct||0).toFixed(4)}% lev=${x.leverage}x | ${proof} | locked-source: ${x.sourceFormulaOriginalLine || 'n/a'} | equation: ${x.equation}`;
 }
 
 function formatSuccessLogBlock(x) {
@@ -2594,6 +2741,8 @@ function getHiveSnapshot() {
       openPositions,
       paperTrades: hiveMemory.totalPaperTrades,
       maxFakeLeverage: Number(config.maxFakeLeverage || MAX_FAKE_LEVERAGE),
+      twoFormulaOnlyMode: TWO_FORMULA_ONLY_MODE,
+      fixedFormulas: fixedFormulaStatus(),
       sprintHorizonSec: Number(config.arenaHorizonSec || 600),
       objective: 'MAX_PROFIT_FASTEST_10M_FAKE_LEVERAGE',
       totalLiquidations: contestants.reduce((sum, c) => sum + Number(c.sprint?.liquidations || 0), 0),
@@ -2618,6 +2767,8 @@ function getHiveSnapshot() {
     totalLiveThoughts: hiveMemory.totalLiveThoughts,
     livingPulseMs: SCIENTIST_THINK_MS,
     collectiveVersion: hiveMemory.collectiveVersion,
+    twoFormulaOnlyMode: TWO_FORMULA_ONLY_MODE,
+    fixedFormulas: fixedFormulaStatus(),
     totalResolved: hiveMemory.totalResolved
   };
 }
