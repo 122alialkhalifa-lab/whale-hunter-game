@@ -1,58 +1,60 @@
-# Whale Hunter Radar — Bitcoin Two Formula Fingerprint V18
+# Whale Hunter Radar — Bitcoin Collective Formula Completion V20
 
-نسخة Bitcoin-only مبنية على فكرتك الأخيرة:
+نسخة BTCUSDT فقط. هذه النسخة لا تستخدم المعادلتين كأوامر دخول مباشرة، بل تستخدمهما كبذور رياضية ناقصة. كل Bot يحاول إضافة قطعة من المعادلة حتى يرتفع التشابه تدريجيًا من 17–25% إلى 50% ثم 70% ثم 90%+ من خلال تجارب Paper Trading حية على بيانات Binance Futures.
 
-- المعادلتان الأصليتان محفوظتان حرفيًا كـ **Reference Winning Formulas**.
-- لا يتم التداول الوهمي بمجرد وجود المعادلة.
-- يتم التداول الوهمي فقط إذا السوق الحالي يشبه بصمة صفقة الربح الأصلية بنسبة عالية.
-- الافتراضي: `FORMULA_FINGERPRINT_MIN_SIMILARITY=90`.
-- إذا التشابه أقل من 90%، تعرض اللعبة السبب ولا تفتح صفقة وهمية.
-- إذا تشابه UP و DOWN في نفس اللحظة، يتم اختيار الأعلى تشابهًا فقط لتجنب Long/Short عكسيين على نفس BTC.
+## الفكرة
 
-## الصيغة الصحيحة
+- BTCUSDT فقط.
+- 500 Bot.
+- كل Bot يبدأ بـ 1,000,000 دولار وهمية.
+- إجمالي رأس المال الوهمي: 500,000,000 دولار.
+- الأسعار والصفقات من Binance Futures WebSocket: `btcusdt@aggTrade`.
+- التداول والرافعة والربح والخسارة وهمية فقط.
+- لا API keys.
+- لا شراء حقيقي.
+- لا بيع حقيقي.
 
-المعادلتان اللتان زودتني بهما تبقيان كما هما للتقييم بعد الصفقة:
+## المنطق الجديد
 
-```text
-BTCUSDT UP | Radar-001 الغواص TAKER_BUY
-WIN net=0.6171% gross=2.0943% fees+slip=1.4772% move=0.1703% lev=12.3x
-result=WIN; R=0.7874; Δwᵢ=η·R·xᵢ
+المعادلتان الأصليتان محفوظتان حرفيًا كبذور:
+
+1. Radar-001 TAKER_BUY UP
+2. Radar-013 DOGFIGHT DOWN
+
+لكن اللعبة لا تدخل لأن المعادلة موجودة. اللعبة تجعل الروبوتات تسأل:
+
+- ما القطعة الناقصة التي ترفع التشابه؟
+- هل TAKER_BUY مهم؟
+- هل RANGE_LOCK مهم؟
+- هل BIG_SELL هو سبب الفشل؟
+- هل TIME / FLOW / NET_WHALE تكمل المعادلة؟
+
+كل Bot يقترح Patch رياضي، يفتح تجربة وهمية، ثم النتيجة إما:
+
+- WIN صافي بعد الرسوم والانزلاق: تثبيت القطع ورفع الأوزان.
+- LOSS: تخفيض الأوزان ووسم المعادلة BROKEN.
+- NEUTRAL: لا تُحسب كفوز.
+
+## التقييم الصارم
+
+```
+move = (exit - entry) / entry * 100
+LONG gross = move * leverage
+SHORT gross = -move * leverage
+fees = roundtrip fee bps * leverage
+slippage = roundtrip slippage bps * leverage
+net = gross - fees - slippage
+
+if net > MIN_NET_PROFIT_PCT => WIN
+elif net < -MAX_NEUTRAL_LOSS_PCT => LOSS
+else => NEUTRAL
+
+R = abs(move)+abs(net) إذا WIN
+R = -(abs(move)+abs(net)) إذا LOSS
+R = 0 إذا NEUTRAL
 ```
 
-```text
-BTCUSDT DOWN | Radar-013 المرصاد DOGFIGHT
-WIN net=0.5379% gross=1.4970% fees+slip=0.9591% move=-0.1871% lev=8x
-result=WIN; R=0.7250; Δwᵢ=η·R·xᵢ
-```
-
-لكن الدخول الآن يعتمد على:
-
-```text
-similarity(current_market, reference_fingerprint) >= FORMULA_FINGERPRINT_MIN_SIMILARITY
-```
-
-## بيانات Binance
-
-- السعر والحركة والتدفق من Binance USDⓈ-M Futures WebSocket الحقيقي.
-- يستخدم BTCUSDT فقط.
-- لا Binance API keys.
-- لا أوامر شراء أو بيع حقيقية.
-- التداول، الرافعة، الأرباح والخسائر كلها وهمية داخل اللعبة.
-
-## Environment Variables اختيارية
-
-```text
-OWNER_PIN=OWNER-7777
-VIEWER_PIN=VIEW-1111
-AUTH_SECRET=change-this-secret-in-render
-FORMULA_FINGERPRINT_MIN_SIMILARITY=90
-PAPER_FEE_BPS=4
-PAPER_SLIPPAGE_BPS=2
-MIN_NET_PROFIT_PCT=0.05
-MAX_NEUTRAL_LOSS_PCT=0.05
-```
-
-## تشغيل Render
+## الإعدادات المهمة في Render
 
 Build Command:
 
@@ -66,20 +68,41 @@ Start Command:
 node server.mjs
 ```
 
-## فحص
-
-افتح:
+Environment Variables اختيارية:
 
 ```text
-/health
+OWNER_PIN=OWNER-7777
+VIEWER_PIN=VIEW-1111
+AUTH_SECRET=change-this-secret
+INITIAL_FAKE_USD=1000000
+BOT_COUNT=500
+TRADE_HORIZON_SEC=600
+MAX_FAKE_LEVERAGE=20
+MIN_NET_PROFIT_PCT=0.05
+PAPER_FEE_BPS=4
+PAPER_SLIPPAGE_BPS=2
 ```
 
-لازم تشوف:
+## روابط مهمة
 
-```json
-"ok": true,
-"twoFormulaOnlyMode": true,
-"websocketConnected": true,
-"formulaFingerprintMinSimilarity": 90
+- `/health` فحص سريع.
+- `/formula-success-logs` سجل JSON للمعادلات الرابحة.
+- `/formula-success-logs.txt` سجل نصي سهل النسخ.
+
+## الدخول الافتراضي
+
+مالك:
+
+```text
+OWNER-7777
 ```
 
+مشاهد:
+
+```text
+VIEW-1111
+```
+
+## أمان
+
+هذه لعبة مراقبة وتجارب وهمية فقط. لا توجد مفاتيح Binance ولا أوامر تداول حقيقية ولا ادعاء ضمان ربح.

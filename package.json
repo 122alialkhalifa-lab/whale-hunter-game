@@ -1,33 +1,18 @@
 {
-  "name": "whale-hunter-bitcoin-formula-fingerprint-v18",
-  "version": "18.0.0",
-  "description": "Bitcoin-only Binance Futures paper arena using exactly two user-approved formulas as reference fingerprints before any paper trade.",
+  "name": "whale-hunter-bitcoin-collective-formula-completion-v20",
+  "version": "20.0.0",
+  "description": "Bitcoin-only game-style paper trading lab: 500 scientist bots complete two seed formulas collectively using live Binance Futures BTCUSDT data.",
   "type": "module",
   "main": "server.mjs",
   "scripts": {
     "start": "node server.mjs",
-    "dev": "node --watch server.mjs"
+    "check": "node --check server.mjs"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18"
   },
   "dependencies": {
     "express": "^4.19.2",
     "ws": "^8.18.0"
-  },
-  "keywords": [
-    "bitcoin",
-    "btcusdt",
-    "binance-futures",
-    "pwa",
-    "sse",
-    "paper-trading-simulation",
-    "fake-money",
-    "two-formula-only",
-    "reference-fingerprint",
-    "strict-evaluation",
-    "no-api-keys",
-    "no-real-trading"
-  ],
-  "license": "MIT"
+  }
 }

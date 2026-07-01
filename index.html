@@ -3,218 +3,65 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Whale Hunter Bitcoin Fingerprint V18</title>
   <meta name="theme-color" content="#00e5ff" />
   <link rel="manifest" href="/manifest.json" />
+  <title>Whale Hunter BTC Formula Completion V20</title>
   <style>
-    :root{
-      --bg:#040713; --panel:rgba(7,16,38,.82); --panel2:rgba(9,27,55,.7); --line:rgba(0,229,255,.25);
-      --cyan:#00e5ff; --green:#30ff9a; --yellow:#ffe866; --red:#ff3b6b; --purple:#ad7cff; --white:#ecfbff;
-      --muted:#8da7bc; --shadow:0 0 28px rgba(0,229,255,.16); --radius:22px;
-    }
-    *{box-sizing:border-box} html,body{height:100%}
-    body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Tahoma,Arial,sans-serif; color:var(--white); background:
-      radial-gradient(circle at 20% 10%, rgba(0,229,255,.15), transparent 30%),
-      radial-gradient(circle at 80% 20%, rgba(173,124,255,.12), transparent 28%),
-      linear-gradient(135deg,#03050d,#061223 48%,#02030a); overflow-x:hidden;}
-    body::before{content:""; position:fixed; inset:0; pointer-events:none; background:linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px, transparent 1px); background-size:24px 24px; mask-image:linear-gradient(to bottom, #000, transparent 90%);}
-    .wrap{max-width:1280px; margin:0 auto; padding:18px 14px 90px}
-    .top{display:grid; grid-template-columns:1.25fr .75fr; gap:14px; align-items:stretch}
-    .hero{position:relative; overflow:hidden; border:1px solid var(--line); background:linear-gradient(135deg,rgba(0,229,255,.12),rgba(8,20,44,.86)); border-radius:28px; padding:18px; box-shadow:var(--shadow)}
-    .hero h1{margin:0; font-size:clamp(27px,4vw,52px); letter-spacing:.5px; text-shadow:0 0 16px rgba(0,229,255,.55)}
-    .hero .sub{margin-top:8px; color:var(--muted); font-size:18px; line-height:1.5}
-    .safe{margin-top:12px; color:#050711; background:linear-gradient(90deg,var(--yellow),#fff2a8); display:inline-block; padding:8px 13px; border-radius:999px; font-weight:900; font-size:15px}
-    .rolebar{display:flex; flex-wrap:wrap; gap:9px; margin-top:14px; direction:ltr; justify-content:flex-end}
-    .pill{border:1px solid var(--line); background:rgba(0,229,255,.08); padding:8px 11px; border-radius:999px; color:var(--cyan); font-weight:800; font-size:14px}
-    .pill.green{color:var(--green); border-color:rgba(48,255,154,.35); background:rgba(48,255,154,.1)} .pill.red{color:var(--red); border-color:rgba(255,59,107,.35); background:rgba(255,59,107,.1)} .pill.yellow{color:var(--yellow); border-color:rgba(255,232,102,.35); background:rgba(255,232,102,.1)}
-    .radarCard{border:1px solid var(--line); background:rgba(4,8,20,.72); border-radius:28px; box-shadow:var(--shadow); padding:14px; min-height:260px; position:relative; overflow:hidden}
-    .radar{width:min(42vw,270px); height:min(42vw,270px); min-width:210px; min-height:210px; margin:auto; border-radius:50%; position:relative; border:2px solid rgba(0,229,255,.36); background:radial-gradient(circle,rgba(0,229,255,.18) 0 2px, transparent 3px), repeating-radial-gradient(circle,rgba(0,229,255,.22) 0 1px, transparent 1px 42px), conic-gradient(from 0deg, rgba(48,255,154,.42), transparent 32%, transparent); animation:spin 6s linear infinite; box-shadow:0 0 30px rgba(0,229,255,.22), inset 0 0 40px rgba(0,229,255,.12)}
-    .radar::before,.radar::after{content:""; position:absolute; inset:50% 0 auto 0; height:1px; background:rgba(0,229,255,.38)} .radar::after{transform:rotate(90deg)}
-    .blip{position:absolute; width:10px; height:10px; border-radius:50%; background:var(--green); box-shadow:0 0 16px var(--green); animation:pulse 1.2s infinite ease-in-out}
-    .blip.hot{background:var(--red); box-shadow:0 0 20px var(--red)}
-    @keyframes spin{to{transform:rotate(360deg)}} @keyframes pulse{50%{transform:scale(1.9); opacity:.55}}
-    .controls{display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin:14px 0}
-    button,.btn{appearance:none; border:1px solid rgba(0,229,255,.4); color:var(--white); background:linear-gradient(180deg,rgba(0,229,255,.18),rgba(0,229,255,.05)); border-radius:18px; padding:14px 12px; font-weight:950; letter-spacing:.3px; min-height:54px; box-shadow:0 0 18px rgba(0,229,255,.12); font-size:15px}
-    button:active{transform:translateY(1px) scale(.99)} button.stop{border-color:rgba(255,59,107,.55); background:rgba(255,59,107,.14)} button.scan{border-color:rgba(255,232,102,.55); color:var(--yellow)} button.save{border-color:rgba(173,124,255,.55)} button:disabled{opacity:.35; filter:grayscale(1)}
-    .grid{display:grid; grid-template-columns:repeat(12,1fr); gap:14px; margin-top:14px}.card{grid-column:span 4; border:1px solid var(--line); background:linear-gradient(180deg,var(--panel),rgba(4,10,24,.66)); border-radius:var(--radius); box-shadow:var(--shadow); padding:14px; min-height:120px; overflow:hidden}.card.wide{grid-column:span 8}.card.full{grid-column:1/-1}.card.half{grid-column:span 6}.card h2{margin:0 0 10px; font-size:20px; color:var(--cyan)} .card h3{margin:0 0 8px; font-size:17px}.big{font-size:38px; font-weight:1000; direction:ltr}.muted{color:var(--muted)} .tiny{font-size:13px;color:var(--muted)}
-    .stats{display:grid; grid-template-columns:repeat(4,1fr); gap:10px}.stat{padding:13px; background:rgba(0,229,255,.06); border:1px solid rgba(0,229,255,.16); border-radius:18px}.stat b{display:block; font-size:25px; direction:ltr}.stat span{color:var(--muted); font-size:13px}
-    .toolbar{display:grid;grid-template-columns:1.4fr repeat(3,auto);gap:8px;margin:10px 0}.toolbar button{min-height:44px;padding:10px 12px;font-size:13px}.copyBtn{min-height:36px;padding:8px 10px;font-size:12px;border-radius:12px}.alert{border:1px solid rgba(255,232,102,.4); background:linear-gradient(90deg,rgba(255,232,102,.18),rgba(255,59,107,.08)); padding:12px; border-radius:18px; margin-bottom:8px}.alert strong{color:var(--yellow)} .alert .eq{direction:ltr; color:var(--green); font-family:ui-monospace,Menlo,monospace; font-size:13px; overflow-wrap:anywhere}
-    .list{display:flex; flex-direction:column; gap:9px; max-height:430px; overflow:auto; padding-left:3px}.row{display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center; border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.035); padding:10px; border-radius:16px}.row .left{min-width:0}.row .symbol{font-size:18px; font-weight:1000; color:var(--white); direction:ltr}.row .bar{height:9px; background:rgba(255,255,255,.08); border-radius:99px; overflow:hidden; margin-top:7px}.row .fill{height:100%; width:0%; background:linear-gradient(90deg,var(--cyan),var(--green)); box-shadow:0 0 12px var(--cyan)}
-    .tag{display:inline-block; border:1px solid rgba(0,229,255,.28); color:var(--cyan); border-radius:999px; padding:4px 8px; margin:2px; font-size:12px}.tag.red{color:var(--red); border-color:rgba(255,59,107,.4)} .tag.green{color:var(--green); border-color:rgba(48,255,154,.4)} .tag.yellow{color:var(--yellow); border-color:rgba(255,232,102,.4)}
-    .settings{display:grid; grid-template-columns:1.5fr repeat(4,1fr); gap:10px} textarea,input{width:100%; border:1px solid rgba(0,229,255,.26); background:rgba(0,0,0,.25); color:var(--white); border-radius:16px; padding:12px; font-size:15px} textarea{min-height:108px; direction:ltr} label{font-size:13px;color:var(--muted); display:block; margin-bottom:5px}.log{font-family:ui-monospace,Menlo,monospace; direction:ltr; color:#b9f7ff; font-size:12px; line-height:1.45; white-space:pre-wrap; max-height:250px; overflow:auto}
-    .login{position:fixed; inset:0; z-index:99; display:flex; align-items:center; justify-content:center; padding:18px; background:rgba(2,4,12,.88); backdrop-filter:blur(12px)}.loginBox{width:min(520px,100%); border:1px solid rgba(0,229,255,.35); background:linear-gradient(180deg,rgba(6,20,45,.94),rgba(3,7,18,.96)); border-radius:30px; padding:22px; box-shadow:0 0 48px rgba(0,229,255,.22)}.loginBox h2{margin:0 0 10px;font-size:30px;color:var(--cyan)}.loginBox input{font-size:22px;text-align:center;letter-spacing:2px; direction:ltr}.hidden{display:none!important}.ltr{direction:ltr}.dangerText{color:var(--red)}.goodText{color:var(--green)}.warnText{color:var(--yellow)}
-    @media(max-width:900px){.toolbar{grid-template-columns:1fr 1fr}.toolbar input{grid-column:1/-1}.top{grid-template-columns:1fr}.controls{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.card,.card.wide,.card.half{grid-column:1/-1}.stats{grid-template-columns:repeat(2,1fr)}.settings{grid-template-columns:1fr 1fr}.settings textarea{grid-column:1/-1}.hero h1{font-size:32px}.radar{width:240px;height:240px}.wrap{padding-bottom:40px}}
+    :root{--bg:#050711;--panel:#0b1024cc;--line:#1a355a;--cyan:#00e5ff;--green:#00ff9d;--yellow:#ffee66;--red:#ff4d6d;--muted:#8aa2c8;--text:#eef7ff;--purple:#a855f7}
+    *{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at 50% 0,#12244a 0,#050711 46%,#02030a 100%);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Tahoma,Arial,sans-serif;min-height:100vh;overflow-x:hidden}.wrap{max-width:1280px;margin:0 auto;padding:18px}.hud{display:grid;grid-template-columns:1.1fr .9fr;gap:14px;align-items:stretch}.hero{border:1px solid #1e5d83;border-radius:24px;padding:18px;background:linear-gradient(135deg,#07162fdd,#090d1dcc);box-shadow:0 0 40px #00e5ff22;position:relative;overflow:hidden}.hero:before{content:"";position:absolute;inset:-50%;background:conic-gradient(from 0deg,transparent,#00e5ff33,transparent 25%,#00ff9d22,transparent 50%);animation:spin 8s linear infinite}.hero>*{position:relative}.title{font-size:clamp(26px,4vw,46px);font-weight:900;letter-spacing:.5px;margin:0}.subtitle{color:var(--muted);font-size:16px;margin:8px 0 0}.pillrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.pill{border:1px solid #23496c;background:#07152a;padding:8px 10px;border-radius:999px;font-weight:800;font-size:13px}.pill.green{border-color:#00ff9d88;color:#00ff9d}.pill.yellow{border-color:#ffee6688;color:#ffee66}.pill.red{border-color:#ff4d6d88;color:#ff4d6d}.radar{border:1px solid #1e5d83;border-radius:24px;background:#050b1a;min-height:260px;display:grid;place-items:center;position:relative;overflow:hidden;box-shadow:inset 0 0 80px #00e5ff14}.radar .circle{width:min(78vw,300px);height:min(78vw,300px);border:2px solid #00e5ff99;border-radius:50%;position:relative;background:radial-gradient(circle,#00e5ff12 0,#00ff9d08 40%,transparent 70%)}.radar .circle:before,.radar .circle:after{content:"";position:absolute;inset:22%;border:1px solid #00e5ff55;border-radius:50%}.radar .circle:after{inset:42%}.sweep{position:absolute;inset:50% 50% 0 50%;width:48%;height:3px;background:linear-gradient(90deg,#00e5ff,transparent);transform-origin:left center;animation:spin 2.8s linear infinite;box-shadow:0 0 25px #00e5ff}.blip{position:absolute;width:10px;height:10px;border-radius:50%;background:#ffee66;box-shadow:0 0 18px #ffee66;animation:pulse 1.3s infinite}.b1{left:64%;top:34%}.b2{left:38%;top:62%;background:#00ff9d;box-shadow:0 0 18px #00ff9d}.b3{left:52%;top:48%;background:#ff4d6d;box-shadow:0 0 18px #ff4d6d}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}.stat{border:1px solid var(--line);border-radius:18px;padding:12px;background:var(--panel);box-shadow:0 0 20px #0006}.stat b{display:block;font-size:20px}.stat span{color:var(--muted);font-size:12px}.controls{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.btn{appearance:none;border:1px solid #1e5d83;background:#0a1a33;color:var(--text);border-radius:14px;padding:12px 14px;font-weight:900;font-size:15px;cursor:pointer}.btn.primary{background:linear-gradient(135deg,#00e5ff33,#00ff9d22);border-color:#00e5ff;color:#fff}.btn.danger{border-color:#ff4d6d;color:#ff9aad}.btn:hover{filter:brightness(1.2)}.section{border:1px solid var(--line);background:var(--panel);border-radius:22px;padding:14px;margin:14px 0;box-shadow:0 0 28px #0005}.section h2{margin:0 0 10px;font-size:20px}.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}.three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}.card{border:1px solid #1e426b;background:#070d1f;border-radius:18px;padding:12px;min-height:90px}.card.good{border-color:#00ff9d88;box-shadow:0 0 18px #00ff9d14}.card.warn{border-color:#ffee6688}.card.bad{border-color:#ff4d6d88}.card h3{margin:0 0 8px;font-size:16px}.bar{height:12px;border-radius:999px;background:#15213d;overflow:hidden;border:1px solid #213a60}.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#00e5ff,#00ff9d,#ffee66);box-shadow:0 0 14px #00e5ff}.small{font-size:12px;color:var(--muted)}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;direction:ltr;text-align:left;white-space:pre-wrap;word-break:break-word}.table{width:100%;border-collapse:separate;border-spacing:0 8px}.table th{font-size:12px;color:var(--muted);text-align:right}.table td{background:#071125;border-top:1px solid #1a355a;border-bottom:1px solid #1a355a;padding:9px;font-size:13px}.table td:first-child{border-right:1px solid #1a355a;border-radius:0 12px 12px 0}.table td:last-child{border-left:1px solid #1a355a;border-radius:12px 0 0 12px}.logs{max-height:340px;overflow:auto}.logitem{border-bottom:1px solid #16233f;padding:8px 0;font-size:13px}.login{position:fixed;inset:0;z-index:20;background:#02030cee;display:grid;place-items:center;padding:22px}.loginbox{max-width:420px;width:100%;border:1px solid #00e5ff77;border-radius:24px;background:#071125;padding:20px;box-shadow:0 0 40px #00e5ff33}.input{width:100%;background:#030816;border:1px solid #23496c;border-radius:14px;padding:14px;color:#fff;font-size:18px;margin:10px 0}.hide{display:none!important}.copy{float:left;font-size:11px;padding:6px 8px}.ltr{direction:ltr;text-align:left}@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{50%{transform:scale(1.9);opacity:.35}}@media(max-width:900px){.hud,.two,.three{grid-template-columns:1fr}.grid{grid-template-columns:1fr 1fr}.wrap{padding:10px}.section{padding:12px}.table{font-size:12px}}
   </style>
 </head>
 <body>
-  <div id="login" class="login hidden">
-    <div class="loginBox">
-      <h2>🔐 دخول لوحة Whale Hunter</h2>
-      <p class="muted">ادخل كود المالك للتحكم الكامل، أو كود المشاهد للاطلاع فقط.</p>
-      <input id="pin" type="password" placeholder="ACCESS PIN" autocomplete="current-password" />
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
-        <button onclick="login()">دخول</button><button onclick="document.getElementById('pin').value=''">مسح</button>
-      </div>
-      <p id="loginMsg" class="tiny dangerText"></p>
-      <p class="tiny">الافتراضي في النسخة: OWNER-7777 و VIEW-1111. غيّرها في Render Environment Variables.</p>
+  <div id="login" class="login hide"><div class="loginbox"><h1>دخول المختبر</h1><p class="small">Owner يتحكم، Viewer يشاهد فقط. التداول وهمي بالكامل.</p><input id="pin" class="input" placeholder="OWNER-7777"/><button class="btn primary" onclick="login()">ENTER</button><p id="loginMsg" class="small"></p></div></div>
+  <div class="wrap">
+    <div class="hud">
+      <div class="hero"><h1 class="title">🧠 Whale Hunter BTC V20</h1><p class="subtitle">Collective Formula Completion — 500 عالم روبوت يكملون المعادلتين تدريجيًا حتى تتحول من 17–25% إلى 90%+ بالتجارب الوهمية الحية.</p><div class="pillrow"><span class="pill green">BTCUSDT فقط</span><span class="pill yellow">$1M لكل Bot</span><span class="pill">Binance live data</span><span class="pill red">Paper trading only</span></div><div class="controls"><button class="btn primary" onclick="post('/start')">START LAB</button><button class="btn" onclick="post('/scan')">PULSE NOW</button><button class="btn danger" onclick="post('/stop')">STOP</button><button class="btn danger" onclick="post('/reset')">RESET LAB</button><button class="btn" onclick="copySuccessTxt()">COPY SUCCESS LOGS</button></div></div>
+      <div class="radar"><div class="circle"><div class="sweep"></div><div class="blip b1"></div><div class="blip b2"></div><div class="blip b3"></div></div></div>
     </div>
+    <div class="grid">
+      <div class="stat"><b id="status">OFF</b><span>Server / Binance</span></div>
+      <div class="stat"><b id="price">--</b><span>BTCUSDT price</span></div>
+      <div class="stat"><b id="bestCompletion">0%</b><span>Best completion</span></div>
+      <div class="stat"><b id="activeTrades">0</b><span>Active paper trades</span></div>
+      <div class="stat"><b id="experiments">0</b><span>Experiments</span></div>
+      <div class="stat"><b id="wins">0</b><span>Real net wins</span></div>
+      <div class="stat"><b id="losses">0</b><span>Losses</span></div>
+      <div class="stat"><b id="treasury">$500M</b><span>Fake total treasury</span></div>
+    </div>
+
+    <div class="section"><h2>🧬 Seed Formulas / المعادلتين كبذور</h2><div class="two" id="seeds"></div></div>
+    <div class="section"><h2>📈 Current BTC Math Snapshot</h2><div class="grid" id="signalGrid"></div></div>
+    <div class="section"><h2>🧪 Formula Completion Evolution</h2><div class="two"><div id="bestUp" class="card"></div><div id="bestDown" class="card"></div></div></div>
+    <div class="section"><h2>🏆 Top Discovered Equations</h2><div class="logs"><table class="table"><thead><tr><th>المعادلة</th><th>اتجاه</th><th>Completion</th><th>W/L/N</th><th>Avg Net</th><th>Status</th></tr></thead><tbody id="formulaRows"></tbody></table></div></div>
+    <div class="section"><h2>🔥 Active Paper Trades</h2><div class="logs"><table class="table"><thead><tr><th>Bot</th><th>Dir</th><th>Lev</th><th>Similarity</th><th>Net الآن</th><th>Formula</th></tr></thead><tbody id="activeRows"></tbody></table></div></div>
+    <div class="section"><h2>📜 Successful Equation Logs / قابل للنسخ</h2><button class="btn copy" onclick="copySuccessTxt()">COPY ALL</button><button class="btn copy" onclick="window.open('/formula-success-logs.txt','_blank')">OPEN TXT</button><div class="logs" id="successLogs"></div></div>
+    <div class="section"><h2>🧠 Live Hive Reports</h2><div class="logs" id="reports"></div></div>
+    <div class="section"><h2>🧾 System Logs</h2><div class="logs" id="logs"></div></div>
+    <p class="small">مراقبة وتداول وهمي فقط. ليست توصية مالية. لا API keys، لا أوامر شراء أو بيع. الأسعار والصفقات من Binance Futures WebSocket عند اتصال السيرفر.</p>
   </div>
-
-  <main class="wrap">
-    <section class="top">
-      <div class="hero">
-        <h1>₿ Whale Hunter Bitcoin Fingerprint V18</h1><p class="muted">Reference Fingerprint Mode: المعادلتان محفوظتان حرفيًا للتقييم، لكن الدخول الوهمي لا يحدث إلا إذا السوق الحالي يشبه بصمة الربح الأصلية بنسبة عالية.</p>
-        <div class="sub">مختبر Bitcoin فقط: كل التداول الوهمي، الرافعة، اللوق، والـ proof مقفلة على المعادلتين، مع بوابة تشابه تمنع تكرار المعادلة إذا لم تعد بصمتها.</div>
-        <div class="safe">مراقبة وتداول وهمي فقط. ليست توصية مالية. الرافعة قد تصفّر الحساب.</div>
-        <div class="rolebar">
-          <span id="roleBadge" class="pill yellow">GUEST</span>
-          <span id="serverBadge" class="pill red">OFFLINE</span>
-          <span id="wsBadge" class="pill">WS ...</span>
-          <span id="coinsBadge" class="pill">BTC 0</span>
-          <span id="proofBadge" class="pill green">Perfect 0</span>
-        </div>
-      </div>
-      <div class="radarCard"><div id="radar" class="radar"></div></div>
-    </section>
-
-    <section class="controls">
-      <button id="soundBtn" onclick="toggleSound()">SOUND</button>
-      <button id="startBtn" onclick="ownerPost('/start')">START LAB</button>
-      <button class="scan" id="scanBtn" onclick="ownerPost('/scan')">PROOF PULSE</button>
-      <button class="save" id="saveBtn" onclick="saveConfig()">SAVE RULES</button>
-      <button class="stop" id="stopBtn" onclick="ownerPost('/stop')">STOP</button>
-    </section>
-
-    <section class="grid">
-      <div class="card full">
-        <h2>🚨 Perfect-So-Far Alerts / تنبيهات النمط 100%</h2>
-        <div class="tiny">لا يظهر هنا إلا نمط وصل إلى الحد الأدنى من التجارب ولم يسجل أي فشل داخل السجل الحي. هذا ليس ضمانًا للمستقبل، بل ختم رياضي داخل بيانات اللعبة حتى الآن.</div>
-        <div id="perfectList" class="list" style="margin-top:10px"></div>
-      </div>
-
-      <div class="card wide">
-        <h2>₿ Bitcoin Reference Fingerprint Lab / مختبر بصمة المعادلتين</h2>
-        <div class="stats">
-          <div class="stat"><span>Total Fake Bank</span><b id="bank">$0</b></div>
-          <div class="stat"><span>Open Paper Positions</span><b id="openPos">0</b></div>
-          <div class="stat"><span>Math Reports</span><b id="reports">0</b></div>
-          <div class="stat"><span>Min Proof Samples</span><b id="minProof">25</b></div>
-        </div>
-        <div id="coinBrains" class="list" style="margin-top:12px"></div>
-      </div>
-      <div class="card">
-        <h2>⚙️ صلاحيات الاطلاع</h2>
-        <p id="permText" class="muted">...</p>
-        <button onclick="logout()">LOGOUT</button>
-        <button id="exportBtn" onclick="exportLab()">EXPORT LAB</button>
-        <button class="stop" id="resetBtn" onclick="resetLab()">RESET LAB</button>
-      </div>
-
-      <div class="card">
-        <h2>🔒 Two Locked Formulas + Fingerprint Gate</h2>
-        <div class="tiny">لا يوجد أي نموذج ثالث. اللعبة تكرر هاتين المعادلتين فقط وتقيّم النتيجة الصافية فعليًا بعد الرسوم والانزلاق.</div>
-        <div id="fixedFormulas" class="list" style="margin-top:10px"></div>
-      </div>
-
-      <div class="card half">
-
-        <h2>📈 BTCUSDT Live Signal</h2>
-        <div id="signals" class="list"></div>
-      </div>
-      <div class="card half">
-        <h2>🧮 Live Math Reports</h2>
-        <div id="mathReports" class="list"></div>
-      </div>
-
-      <div class="card full">
-        <h2>📜 Successful Equation Logs / سجل المعادلات الناجحة</h2>
-        <div class="tiny">كل معادلة تنتهي بربح وهمي تُحفظ هنا. تقدر تبحث، تنسخ سطر واحد، تنسخ الكل، أو تفتح ملف TXT مباشر.</div>
-        <div class="toolbar">
-          <input id="successSearch" placeholder="بحث داخل BTCUSDT: BIG_BUY أو اسم Bot أو معادلة" oninput="loadSuccessLogs()" />
-          <button onclick="loadSuccessLogs()">REFRESH</button>
-          <button onclick="copyAllSuccessLogs()">COPY ALL</button>
-          <button onclick="openSuccessTxt()">OPEN TXT</button>
-        </div>
-        <div id="successLogs" class="list"></div>
-      </div>
-
-      <div class="card half">
-        <h2>🏆 Pattern Vault</h2>
-        <div id="patterns" class="list"></div>
-      </div>
-      <div class="card half">
-        <h2>🧬 Collective Equation</h2>
-        <div id="weights" class="list"></div>
-      </div>
-
-      <div class="card full">
-        <h2>🛠️ Owner Settings / إعدادات المالك</h2>
-        <div class="settings">
-          <div><label>Symbol Locked</label><textarea id="symbols" readonly>BTCUSDT</textarea></div>
-          <div><label>Whale USD</label><input id="whaleUsd" type="number" value="30000"></div>
-          <div><label>Min Score</label><input id="minScore" type="number" value="70"></div>
-          <div><label>Window Sec</label><input id="windowSec" type="number" value="60"></div>
-          <div><label>10m Horizon Sec</label><input id="arenaHorizonSec" type="number" value="600"></div>
-        </div>
-      </div>
-      <div class="card full"><h2>📟 Logs</h2><div id="logs" class="log"></div></div>
-    </section>
-  </main>
-
 <script>
-let role='guest', canControl=false, es=null, sound=false, lastPerfectCount=0, state=null, proof=null;
+let state=null, role='guest', es=null;
 const $=id=>document.getElementById(id);
-const fmtUsd=n=>'$'+Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0});
-const pct=n=>Number(n||0).toFixed(1)+'%';
-function log(m){ const el=$('logs'); el.textContent = `[${new Date().toLocaleTimeString()}] ${m}\n` + el.textContent.slice(0,6000); }
-async function api(url, opts={}){ const r=await fetch(url,{credentials:'same-origin',headers:{'Content-Type':'application/json'},...opts}); if(!r.ok){let t=await r.text(); throw new Error(t||r.statusText)} return r.json(); }
-async function checkAuth(){ try{const me=await api('/auth/me'); role=me.role; canControl=!!me.canControl; $('login').classList.toggle('hidden', me.authenticated || me.requireAuth===false); updateRole(); if(me.authenticated||me.requireAuth===false){connect(); refresh(); setInterval(refresh,5000);} }catch(e){$('login').classList.remove('hidden')} }
-async function login(){ try{const pin=$('pin').value.trim(); const r=await api('/auth/login',{method:'POST',body:JSON.stringify({pin})}); role=r.role; canControl=r.canControl; $('login').classList.add('hidden'); updateRole(); connect(); refresh(); }catch(e){$('loginMsg').textContent='الكود خطأ أو غير مسموح.'} }
-async function logout(){ try{await api('/auth/logout',{method:'POST',body:'{}'})}catch{} location.reload(); }
-function updateRole(){ $('roleBadge').textContent=role.toUpperCase(); $('roleBadge').className='pill '+(canControl?'green':'yellow'); $('permText').innerHTML= canControl ? 'أنت <b class="goodText">OWNER</b>: تقدر تبدأ/توقف/تعدل/تصدّر/تمسح.' : 'أنت <b class="warnText">VIEWER</b>: اطلاع فقط، لا يمكنك تغيير تشغيل اللعبة.'; ['startBtn','scanBtn','saveBtn','stopBtn','resetBtn','exportBtn'].forEach(id=>$(id).disabled=!canControl); }
-function connect(){ if(es) es.close(); es=new EventSource('/events'); es.onopen=()=>log('SSE connected'); es.onerror=()=>log('SSE reconnecting...'); ['hello','scan','arena','hive-live','scientist-think','math-report','success-log','hive-learn','proof','log','status','stream','symbol'].forEach(ev=>{ es.addEventListener(ev,e=>handleEvent(ev, JSON.parse(e.data))); }); }
-function handleEvent(ev,d){ if(ev==='hello'){ state=d; if(d.hive) renderHive(d.hive); if(d.arena) renderArena(d.arena); log('hello from server'); }
- if(ev==='scan'){ state={...(state||{}), lastScan:d, hive:d.hive, arena:d.arena, running:d.running}; renderState(state); }
- if(ev==='proof'){ proof=d; renderProof(d); }
- if(ev==='hive-live'||ev==='hive-learn'){ if(d.hive) renderHive(d.hive); if(d.consensus||d.weights) renderWeights(d); }
- if(ev==='scientist-think'){ renderThoughts(d); }
- if(ev==='math-report'){ addMathReport(d.report); }
- if(ev==='success-log'){ addSuccessLog(d.log); if(sound) beep(); }
- if(ev==='log'){ log(`${d.type||'log'}: ${d.message}`); }
- if(ev==='status'){ $('serverBadge').textContent=d.running?'LIVE':'IDLE'; $('serverBadge').className='pill '+(d.running?'green':'yellow'); }
- if(ev==='stream'){ $('wsBadge').textContent=d.connected?'WS LIVE':'WS OFF'; $('wsBadge').className='pill '+(d.connected?'green':'red'); }
- if(ev==='symbol'){ updateRadar(d.signal); }
-}
-async function refresh(){ try{ const s=await api('/state'); state=s; renderState(s); const p=await api('/proof'); proof=p.proof; renderProof(proof); await loadSuccessLogs(false); }catch(e){ log('refresh failed: '+e.message); if(String(e.message).includes('AUTH')) $('login').classList.remove('hidden'); } }
-function renderState(s){ $('serverBadge').textContent=s.running?'LIVE':'IDLE'; $('serverBadge').className='pill '+(s.running?'green':'yellow'); $('wsBadge').textContent=s.websocket?.connected?'WS LIVE':'WS OFF'; $('wsBadge').className='pill '+(s.websocket?.connected?'green':'red'); $('coinsBadge').textContent='BTC '+(s.websocket?.connected?'LIVE':'WAIT'); if(s.config){$('symbols').value='BTCUSDT'; $('whaleUsd').value=s.config.whaleUsd; $('minScore').value=s.config.minScore; $('windowSec').value=s.config.windowSec; $('arenaHorizonSec').value=s.config.arenaHorizonSec;} if(s.hive) renderHive(s.hive); if(s.arena) renderArena(s.arena); if(s.lastScan) renderSignals(s.lastScan.results||[]); }
-function renderHive(h){ $('bank').textContent=fmtUsd(h.fakeBank?.totalEquity); $('openPos').textContent=h.fakeBank?.openPositions||0; $('reports').textContent=(h.totalFormulaReports||0)+' / ✅ '+(h.successfulFormulaLogCount||0); if(h.successfulFormulaLogs) renderSuccessLogs(h.successfulFormulaLogs); $('minProof').textContent=h.proof?.minProofSamples||25; renderFixedFormulas(h.fixedFormulas||h.fakeBank?.fixedFormulas||[]); renderPatterns(h.topPatterns||[]); renderWeights({weights:h.topWeights||[],consensus:h.mathConsensus}); renderMathReports(h.formulaReports||[]); if(h.proof) renderProof(h.proof); }
-function renderFixedFormulas(arr){ const el=$('fixedFormulas'); if(!el) return; el.innerHTML=(arr||[]).map((f,i)=>{ const m=f.lastMatch||{}; const sim=Number(m.similarity||0); const status=m.allowed?'MATCH / دخول مسموح':'NO MATCH / لا دخول'; const cls=m.allowed?'green':'red'; const terms=(m.strongest||[]).slice(0,4).map(t=>`${t.feature}:${Number(t.closeness||0).toFixed(0)}%`).join(' · '); const weak=(m.weakest||[]).slice(0,2).map(t=>`${t.feature}:${Number(t.closeness||0).toFixed(0)}%`).join(' · '); return `<div class="row"><div class="left"><div class="symbol">${f.direction} · ${f.styleKey} · ${f.leverage}x</div><span class="tag ${cls}">${status}</span> <span class="tiny">similarity ${sim.toFixed(2)}% / min ${f.fingerprint?.minSimilarity||90}%</span><div class="bar"><div class="fill" style="width:${Math.min(100,sim)}%"></div></div><div class="tiny">أقوى تشابه: ${terms||'بانتظار scan'} ${weak?` | أضعف: ${weak}`:''}</div><div class="eq">${f.originalLine||f.equation||''}</div></div><button class="copyBtn" data-formula-index="${i}">COPY</button></div>`; }).join('') || '<div class="muted">بانتظار fixed formulas من السيرفر.</div>'; [...el.querySelectorAll('button[data-formula-index]')].forEach(btn=>btn.onclick=()=>copyText((arr[Number(btn.dataset.formulaIndex)]||{}).originalLine||'')); }
-function renderArena(a){ /* reserved */ }
-function renderProof(p){ if(!p) return; $('proofBadge').textContent='Perfect '+(p.counts?.perfect||p.perfect?.length||0); $('minProof').textContent=p.minProofSamples||25; const list=$('perfectList'); const arr=p.perfect||[]; if(arr.length>lastPerfectCount && sound) beep(); lastPerfectCount=arr.length; list.innerHTML= arr.length? arr.map(x=>`<div class="alert"><strong>${x.alert}</strong> <span class="ltr">${x.symbol}</span> ${x.direction}<br><span class="tiny">${x.tag} · wins ${x.wins}/${x.realClosedTrials||x.games} · losses ${x.losses||0} · neutral ${x.neutrals||0} · avg ${x.avgPnl}</span><div class="eq">${x.equation}</div></div>`).join('') : '<div class="muted">لا يوجد نمط 100% حتى الآن. الخلية ما زالت تبحث وتفشل وتعدل.</div>'; const coins=$('coinBrains'); const c=p.coinBrains||[]; coins.innerHTML=c.length? c.filter(x=>x.symbol==='BTCUSDT').slice(0,1).map(x=>`<div class="row"><div class="left"><div class="symbol">${x.symbol}</div><span class="tiny">Patterns ${x.patterns} · Perfect ${x.perfect} · Games ${x.games} · Best ${x.bestProof?.toFixed?x.bestProof.toFixed(1):x.bestProof}</span><div class="bar"><div class="fill" style="width:${Math.min(100,x.understanding||0)}%"></div></div></div><b>${x.understanding}</b></div>`).join('') : '<div class="muted">تحتاج صفقات وهمية محلولة أكثر حتى تظهر Coin Brains.</div>'; }
-function renderSignals(results){ const el=$('signals'); el.innerHTML=results.filter(x=>x.symbol==='BTCUSDT').slice(0,1).map(s=>`<div class="row"><div class="left"><div class="symbol">${s.symbol}</div><span class="tiny">Score ${s.score} · Price ${Number(s.price||0).toPrecision(7)} · Buy ${pct((s.buyPct||0)*100)} · Δ ${pct(s.priceChangePct)}</span><div>${(s.tags||[]).slice(0,4).map(t=>`<span class="tag ${t.includes('SELL')?'red':t.includes('BUY')?'green':'yellow'}">${t}</span>`).join('')}</div><div class="bar"><div class="fill" style="width:${s.score||0}%"></div></div></div><b>${s.hot?'🔥':'👀'}</b></div>`).join('') || '<div class="muted">بانتظار أول Scan.</div>'; }
-function renderPatterns(arr){ $('patterns').innerHTML=arr.slice(0,24).map(p=>`<div class="row"><div class="left"><div class="symbol">${p.key}</div><span class="tiny">W ${p.wins} / L ${p.losses} · ${pct((p.winRate||0)*100)} · pnl ${Number(p.pnl||0).toFixed(1)}</span><div class="bar"><div class="fill" style="width:${Math.min(100,(p.winRate||0)*100)}%"></div></div></div><b>${p.losses===0?'👑':'🧪'}</b></div>`).join('') || '<div class="muted">لا يوجد Patterns بعد.</div>'; }
-function renderWeights(d){ const weights=d.weights||d.topWeights||[]; $('weights').innerHTML=(d.consensus?`<div class="alert"><strong>Collective:</strong><div class="eq">${d.consensus.equation||''}</div><div class="tiny">${d.consensus.teaching||''}</div></div>`:'') + weights.slice(0,20).map(w=>`<div class="row"><div class="left"><div class="symbol">${w.feature}</div><span class="tiny">weight ${Number(w.weight||0).toFixed(4)} · updates ${w.stats?.updates||0}</span><div class="bar"><div class="fill" style="width:${Math.min(100,Math.abs(w.weight||0)*120)}%"></div></div></div><b>${(w.weight||0)>=0?'▲':'▼'}</b></div>`).join(''); }
-function renderMathReports(arr){ $('mathReports').innerHTML=arr.slice(0,24).map(r=>mathReportHTML(r)).join('') || '<div class="muted">بانتظار تقارير العلماء.</div>'; }
-function addMathReport(r){ const el=$('mathReports'); el.insertAdjacentHTML('afterbegin', mathReportHTML(r)); while(el.children.length>30) el.lastElementChild.remove(); }
-function renderThoughts(d){ if(d.reports) renderMathReports(d.reports); }
-function mathReportHTML(r){ if(!r) return ''; const terms=(r.terms||[]).slice(0,4).map(t=>`${t.feature}:${Number(t.value??t.actual??0).toFixed(2)}${t.target!==undefined?`→${Number(t.target).toFixed(2)}`:''}`).join(' · '); const fm=r.formulaMatch; const matchLine=fm?`<span class="tag ${fm.allowed?'green':'red'}">Fingerprint ${Number(fm.similarity||0).toFixed(1)}%</span> <span class="tiny">${fm.reason||''}</span>`:''; return `<div class="row"><div class="left"><div class="symbol">${r.callsign||r.bot||'BOT'} ${r.symbol?'<span class="tiny ltr">'+r.symbol+'</span>':''}</div>${matchLine}<span class="tiny">${r.direction||''} · reward ${Number(r.reward||r.liveReward||0).toFixed(2)} · ${r.mood||''}</span><div class="eq">${r.equation||'C = 50 + 38Σ(wᵢxᵢ)'}</div><span class="tiny">${terms}</span></div><b>${r.hit===false?'❌':r.hit===true?'✅':'🧠'}</b></div>`; }
-
-function successLogHTML(x){ if(!x) return ''; const line=(x.copyLine||'').replace(/`/g,''); const terms=(x.terms||[]).slice(0,5).map(t=>`${t.feature}:${Number(t.value??0).toFixed(2)}`).join(' · '); const best=(x.relatedPatterns||[])[0]; return `<div class="row"><div class="left"><div class="symbol">✅ ${x.symbol} <span class="tiny ltr">${x.direction} · ${x.bot||''}</span></div><span class="tiny">net ${Number(x.netPnlPct??x.pnl??0).toFixed(3)}% · gross ${Number(x.grossPnlPct||0).toFixed(3)}% · fees+slip ${(Number(x.feesPct||0)+Number(x.slippagePct||0)).toFixed(3)}% · move ${Number(x.movePct||0).toFixed(3)}% · lev ${x.leverage||1}x ${best?`· proof ${best.wins}/${best.games}`:''}</span><div class="eq">${x.sourceFormulaOriginalLine?'SOURCE: '+x.sourceFormulaOriginalLine+'<br>':''}${x.equation||''}</div><span class="tiny">${terms}</span></div><button class="copyBtn" onclick='copyText(${JSON.stringify(line)})'>COPY</button></div>`; }
-function renderSuccessLogs(arr){ successLogs=arr||successLogs||[]; const el=$('successLogs'); if(!el) return; el.innerHTML=(successLogs||[]).slice(0,80).map(successLogHTML).join('') || '<div class="muted">لا توجد معادلات ناجحة محفوظة بعد. انتظر إغلاق صفقات وهمية رابحة.</div>'; }
-function addSuccessLog(x){ if(!x) return; successLogs.unshift(x); successLogs=successLogs.slice(0,200); renderSuccessLogs(successLogs); }
-let successLoadTimer=null;
-async function loadSuccessLogs(immediate=true){ clearTimeout(successLoadTimer); const run=async()=>{ try{ const q=encodeURIComponent(($('successSearch')?.value||'BTCUSDT').trim()||'BTCUSDT'); const d=await api('/formula-success-logs?limit=200&symbol=BTCUSDT'+(q&&q!=='BTCUSDT'?'&q='+q:'')); renderSuccessLogs(d.logs||[]); }catch(e){ if(immediate) log('success logs failed: '+e.message); } }; if(immediate) successLoadTimer=setTimeout(run,250); else await run(); }
-async function copyAllSuccessLogs(){ try{ const q=encodeURIComponent(($('successSearch')?.value||'BTCUSDT').trim()||'BTCUSDT'); const d=await api('/formula-success-logs?limit=500&symbol=BTCUSDT'+(q&&q!=='BTCUSDT'?'&q='+q:'')); await copyText(d.text||''); log('copied '+(d.returned||0)+' successful equation log(s)'); }catch(e){ log('copy all failed: '+e.message); } }
-function openSuccessTxt(){ const q=encodeURIComponent(($('successSearch')?.value||'BTCUSDT').trim()||'BTCUSDT'); window.open('/formula-success-logs.txt?limit=500&symbol=BTCUSDT'+(q&&q!=='BTCUSDT'?'&q='+q:''),'_blank'); }
-async function copyText(t){ try{ await navigator.clipboard.writeText(t||''); log('copied to clipboard'); }catch{ const ta=document.createElement('textarea'); ta.value=t||''; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); log('copied'); } }
-function updateRadar(s){ const r=$('radar'); const b=document.createElement('i'); b.className='blip '+(s.hot?'hot':''); const angle=Math.random()*Math.PI*2, rad=35+Math.random()*78; b.style.left=`calc(50% + ${Math.cos(angle)*rad}px)`; b.style.top=`calc(50% + ${Math.sin(angle)*rad}px)`; b.title=s.symbol; r.appendChild(b); setTimeout(()=>b.remove(),4500); }
-async function ownerPost(url){ try{ const r=await api(url,{method:'POST',body:'{}'}); log(url+' ok'); refresh(); }catch(e){ log('OWNER ACTION FAILED: '+e.message); } }
-async function saveConfig(){ const body={ symbols:['BTCUSDT'], whaleUsd:+$('whaleUsd').value, minScore:+$('minScore').value, windowSec:+$('windowSec').value, arenaHorizonSec:+$('arenaHorizonSec').value }; try{await api('/config',{method:'POST',body:JSON.stringify(body)}); log('settings saved'); refresh();}catch(e){log('save failed: '+e.message)} }
-async function resetLab(){ if(!confirm('Reset lab?')) return; try{await api('/admin/reset-lab',{method:'POST',body:'{}'}); log('lab reset'); refresh();}catch(e){log('reset failed: '+e.message)} }
-async function exportLab(){ try{ const d=await api('/admin/export'); const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='whale-hunter-bitcoin-fingerprint-v18-export.json'; a.click(); URL.revokeObjectURL(a.href);}catch(e){log('export failed: '+e.message)} }
-function toggleSound(){ sound=!sound; $('soundBtn').textContent=sound?'SOUND ON':'SOUND'; if(sound) beep(); }
-function beep(){ try{ const ctx=new (window.AudioContext||window.webkitAudioContext)(); const o=ctx.createOscillator(); const g=ctx.createGain(); o.frequency.value=740; o.connect(g); g.connect(ctx.destination); g.gain.setValueAtTime(.0001,ctx.currentTime); g.gain.exponentialRampToValueAtTime(.16,ctx.currentTime+.02); g.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+.16); o.start(); o.stop(ctx.currentTime+.18); }catch{} }
-if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(()=>{});} checkAuth();
+function fmt(n,d=2){n=Number(n||0);return n.toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:d})}
+function usd(n){return '$'+Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0})}
+async function me(){try{const r=await fetch('/auth/me');const j=await r.json();role=j.role;if(!j.canView)$('login').classList.remove('hide');else boot();}catch{$('login').classList.remove('hide')}}
+async function login(){const pin=$('pin').value.trim();const r=await fetch('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});if(r.ok){$('login').classList.add('hide');boot()}else $('loginMsg').textContent='كود غلط'}
+async function post(url){const r=await fetch(url,{method:'POST'});if(!r.ok) alert('رفض الأمر أو يحتاج Owner');}
+function boot(){if(es)es.close();es=new EventSource('/events');es.addEventListener('init',e=>render(JSON.parse(e.data)));es.addEventListener('tick',e=>render(JSON.parse(e.data)));es.addEventListener('status',e=>render(JSON.parse(e.data)));es.addEventListener('reset',e=>render(JSON.parse(e.data)));es.addEventListener('log',()=>{});fetch('/api/snapshot').then(r=>r.json()).then(render).catch(()=>{});}
+function render(s){state=s;$('status').textContent=(s.running?'LIVE':'IDLE')+' / '+(s.wsConnected?'BINANCE':'NO WS');$('price').textContent=s.price?fmt(s.price,2):'--';$('bestCompletion').textContent=fmt(s.summary?.bestCompletion||0,1)+'%';$('activeTrades').textContent=s.summary?.activeTrades||0;$('experiments').textContent=s.summary?.totalExperiments||0;$('wins').textContent=s.summary?.wins||0;$('losses').textContent=s.summary?.losses||0;$('treasury').textContent=usd(s.totalFakeTreasury||0);renderSeeds(s);renderSignal(s.signal||{});renderBest('bestUp',s.bestUp);renderBest('bestDown',s.bestDown);renderFormulas(s.formulas||[]);renderActive(s.activeTrades||[]);renderSuccess(s.successLogs||[]);renderReports(s.reports||[],s.completionEvents||[]);renderLogs(s.logs||[])}
+function renderSeeds(s){$('seeds').innerHTML=(s.seeds||[]).map(seed=>`<div class="card warn"><h3>${seed.label}</h3><div class="small">Seed similarity floor: ${seed.seedSimilarityFloor}% | lev ${seed.leverage}x | target net ${seed.targetNetPct}%</div><div class="mono">${seed.equation}</div><button class="btn copy" onclick='copyText(${JSON.stringify(seed.originalLine)})'>COPY</button></div>`).join('')}
+function renderSignal(x){const v=x.vector||{};const items=[['Buy%',(x.buyPct*100||0).toFixed(1)+'%'],['Flow',usd(x.totalFlow)],['Big Buy',usd(x.bigBuyUsd)],['Big Sell',usd(x.bigSellUsd)],['Net Whale',usd(x.netWhale)],['Range',(x.priceRangePct||0).toFixed(4)+'%'],['Move',(x.priceChangePct||0).toFixed(4)+'%'],['Watch Score',x.watchScore||0],['TAKER_BUY',fmt(v.TAKER_BUY,3)],['RANGE_LOCK',fmt(v.RANGE_LOCK,3)],['PRICE_LIFT',fmt(v.PRICE_LIFT,3)],['SELL_PRESSURE',fmt(v.SELL_PRESSURE,3)]];$('signalGrid').innerHTML=items.map(([a,b])=>`<div class="stat"><b>${b}</b><span>${a}</span></div>`).join('')}
+function renderBest(id,f){if(!f){$(id).innerHTML='--';return}const cls=f.status==='BROKEN'?'bad':f.completion>=90?'good':'warn';$(id).className='card '+cls;$(id).innerHTML=`<h3>${f.direction} / ${f.id}</h3><div class="bar"><i style="width:${Math.min(100,f.completion)}%"></i></div><p><b>${fmt(f.completion,2)}%</b> completion | ${f.status}</p><p class="small">W:${f.stats.wins} L:${f.stats.losses} N:${f.stats.neutrals} | Avg net ${fmt(f.stats.avgNetPct,4)}%</p><div class="mono">${f.equation}</div>`}
+function renderFormulas(rows){$('formulaRows').innerHTML=rows.map(f=>`<tr><td class="mono">${f.id}<br>${f.equation}</td><td>${f.direction}</td><td>${fmt(f.completion,1)}%</td><td>${f.stats.wins}/${f.stats.losses}/${f.stats.neutrals}</td><td>${fmt(f.stats.avgNetPct,4)}%</td><td>${f.status}</td></tr>`).join('')}
+function renderActive(rows){$('activeRows').innerHTML=rows.map(t=>`<tr><td>${t.botName}</td><td>${t.direction}</td><td>${t.leverage}x</td><td>${fmt(t.similarityAtEntry,1)}%</td><td>${fmt(t.preview?.netPnlPct,4)}%</td><td class="mono">${t.formulaId}</td></tr>`).join('')}
+function renderSuccess(rows){$('successLogs').innerHTML=rows.map(l=>`<div class="logitem"><button class="btn copy" onclick='copyText(${JSON.stringify(formatLog(l))})'>COPY</button><b>${l.time} ${l.direction} WIN net=${l.netPnlPct}% profit=${usd(l.profitUsd)}</b><div class="mono">${l.equation}\n${l.discoveryEquation}</div></div>`).join('')||'<p class="small">لا يوجد WIN صافي بعد.</p>'}
+function formatLog(l){return `[${l.time}] ${l.symbol} ${l.direction} | ${l.bot} | WIN net=${l.netPnlPct}% gross=${l.grossPnlPct}% fees=${l.feesPct}% slippage=${l.slippagePct}% move=${l.movePct}% lev=${l.leverage}x | formula=${l.formulaId} completion=${l.completion}% similarity=${l.similarity}% | equation: ${l.equation}\nDISCOVERY: ${l.discoveryEquation}`}
+function renderReports(r,e){const merged=[...e.map(x=>({...x,source:'completion'})),...r.map(x=>({...x,source:'report'}))].sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,90);$('reports').innerHTML=merged.map(x=>`<div class="logitem"><b>${new Date(x.ts).toLocaleTimeString()} ${x.type||''}</b><div>${x.message||''}</div>${x.equation?`<div class="mono">${x.equation}</div>`:''}</div>`).join('')}
+function renderLogs(rows){$('logs').innerHTML=rows.slice().reverse().map(x=>`<div class="logitem"><b>${x.type}</b> <span class="small">${new Date(x.ts).toLocaleTimeString()}</span><div>${x.message}</div></div>`).join('')}
+function copyText(t){navigator.clipboard?.writeText(t).then(()=>alert('تم النسخ'))}
+async function copySuccessTxt(){const r=await fetch('/formula-success-logs.txt');const t=await r.text();copyText(t)}
+if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
+me();
 </script>
 </body>
 </html>
