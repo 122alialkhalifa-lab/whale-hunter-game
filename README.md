@@ -1,4 +1,4 @@
-# Whale Hunter Radar — Bitcoin Collective Formula Completion V20
+# Whale Hunter Radar — Bitcoin Collective Formula Completion + Live Data Guard V21
 
 نسخة BTCUSDT فقط. هذه النسخة لا تستخدم المعادلتين كأوامر دخول مباشرة، بل تستخدمهما كبذور رياضية ناقصة. كل Bot يحاول إضافة قطعة من المعادلة حتى يرتفع التشابه تدريجيًا من 17–25% إلى 50% ثم 70% ثم 90%+ من خلال تجارب Paper Trading حية على بيانات Binance Futures.
 
@@ -106,3 +106,8 @@ VIEW-1111
 ## أمان
 
 هذه لعبة مراقبة وتجارب وهمية فقط. لا توجد مفاتيح Binance ولا أوامر تداول حقيقية ولا ادعاء ضمان ربح.
+
+
+## V21 Live Data Guard
+
+هذه النسخة لا تكتفي بـ websocketConnected. تضيف lastTradeAt, lastTradeAgeMs, lastPriceSource, tradeMessageCount, wsMessageCount, dataWarning، وتستخدم fallback خفيف إذا كان الاتصال مفتوحًا لكن لا تصل صفقات BTC.

@@ -1,33 +1,18 @@
 {
-  "name": "whale-hunter-bitcoin-two-formula-v17",
-  "version": "17.0.0",
-  "description": "Bitcoin-only Binance Futures paper arena locked to exactly two user-approved formulas: BTCUSDT UP TAKER_BUY and BTCUSDT DOWN DOGFIGHT.",
+  "name": "whale-hunter-bitcoin-collective-formula-v21-live-data-guard",
+  "version": "21.0.0",
+  "description": "Bitcoin-only collective formula completion with live Binance data guard and fallback diagnostics.",
   "type": "module",
   "main": "server.mjs",
   "scripts": {
     "start": "node server.mjs",
-    "dev": "node --watch server.mjs"
+    "check": "node --check server.mjs"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18"
   },
   "dependencies": {
     "express": "^4.19.2",
     "ws": "^8.18.0"
-  },
-  "keywords": [
-    "bitcoin",
-    "btcusdt",
-    "binance-futures",
-    "pwa",
-    "sse",
-    "paper-trading-simulation",
-    "fake-money",
-    "two-formula-only",
-    "fixed-formula",
-    "strict-evaluation",
-    "no-api-keys",
-    "no-real-trading"
-  ],
-  "license": "MIT"
+  }
 }

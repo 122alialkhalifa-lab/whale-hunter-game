@@ -16,7 +16,10 @@ const VIEWER_PIN = process.env.VIEWER_PIN || 'VIEW-1111';
 const REQUIRE_AUTH = String(process.env.REQUIRE_AUTH || 'true').toLowerCase() !== 'false';
 
 const BTC = 'BTCUSDT';
-const BINANCE_WS = 'wss://fstream.binance.com/ws/btcusdt@aggTrade';
+const BINANCE_WS_PRIMARY = 'wss://fstream.binance.com/stream?streams=btcusdt@aggTrade/btcusdt@markPrice@1s/btcusdt@miniTicker';
+const BINANCE_WS_BACKUP = 'wss://fstream.binance.com/ws/btcusdt@aggTrade';
+const BINANCE_PRICE_REST = 'https://fapi.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT';
+const BINANCE_AGG_REST = 'https://fapi.binance.com/fapi/v1/aggTrades?symbol=BTCUSDT&limit=80';
 const BOT_COUNT = Number(process.env.BOT_COUNT || 500);
 const INITIAL_FAKE_USD = Number(process.env.INITIAL_FAKE_USD || 1000000);
 const PAPER_FEE_BPS = Number(process.env.PAPER_FEE_BPS || 4);
@@ -89,6 +92,15 @@ let scanning = false;
 let ws = null;
 let wsConnected = false;
 let wsReconnectTimer = null;
+let wsMode = 'primary';
+let wsOpenAt = 0;
+let lastWsMessageAt = 0;
+let lastPriceSource = 'none';
+let tradeMessageCount = 0;
+let wsMessageCount = 0;
+let restFallbackCount = 0;
+let lastRestFallbackAt = 0;
+let dataWarning = 'NO_DATA_YET';
 let currentPrice = 0;
 let lastTradeAt = 0;
 let trades = [];
@@ -124,8 +136,17 @@ app.get('/health', (_req, res) => res.json({
   initialMillionPerBot: INITIAL_FAKE_USD >= 1000000,
   botCount: BOT_COUNT,
   websocketConnected: wsConnected,
+  websocketHasTradeData: lastTradeAt > 0 && Date.now() - lastTradeAt < 20000,
   currentPrice,
   lastTradeAt,
+  lastTradeAgeMs: lastTradeAt ? Date.now() - lastTradeAt : null,
+  lastWsMessageAt,
+  lastWsMessageAgeMs: lastWsMessageAt ? Date.now() - lastWsMessageAt : null,
+  lastPriceSource,
+  tradeMessageCount,
+  wsMessageCount,
+  restFallbackCount,
+  dataWarning,
   activeTrades: activeTrades.length,
   formulas: formulas.length,
   bestCompletion: bestFormula()?.completion || 0,
@@ -188,7 +209,7 @@ function startLab() {
   connectBinance();
   if (!tickTimer) tickTimer = setInterval(labTick, BOT_TICK_MS);
   if (!pushTimer) pushTimer = setInterval(() => broadcast('tick', snapshot()), THINK_PUSH_MS);
-  log('system', 'V20 Collective Formula Completion started. 500 bots, $1M each, BTCUSDT only.');
+  log('system', 'V21 Live Data Guard started. 500 bots, $1M each, BTCUSDT only.');
 }
 
 function stopLab() {
@@ -219,36 +240,116 @@ function resetLab() {
   broadcast('reset', snapshot());
 }
 
-function connectBinance() {
+function connectBinance(forceMode = null) {
+  if (forceMode) wsMode = forceMode;
   if (wsConnected || ws?.readyState === WebSocket.CONNECTING) return;
   try { ws?.terminate?.(); } catch {}
-  ws = new WebSocket(BINANCE_WS);
-  ws.on('open', () => { wsConnected = true; log('binance', 'Connected to Binance Futures BTCUSDT aggTrade WebSocket.'); broadcast('status', snapshot()); });
+  const url = wsMode === 'backup' ? BINANCE_WS_BACKUP : BINANCE_WS_PRIMARY;
+  ws = new WebSocket(url, { perMessageDeflate: false, handshakeTimeout: 12000 });
+  wsOpenAt = Date.now();
+  ws.on('open', () => {
+    wsConnected = true;
+    dataWarning = 'WAITING_FOR_BTC_TRADES';
+    log('binance', `Connected to Binance Futures BTCUSDT WebSocket (${wsMode}). Waiting for real trade data...`);
+    broadcast('status', snapshot());
+  });
   ws.on('message', raw => {
     try {
-      const t = JSON.parse(raw.toString());
-      const price = Number(t.p);
-      const qty = Number(t.q);
-      if (!Number.isFinite(price) || !Number.isFinite(qty) || price <= 0) return;
-      currentPrice = price;
-      lastTradeAt = Number(t.T || Date.now());
-      price24h.high = price24h.high ? Math.max(price24h.high, price) : price;
-      price24h.low = price24h.low ? Math.min(price24h.low, price) : price;
-      trades.push({ ts: lastTradeAt, price, qty, usd: price * qty, buyerAggressive: t.m === false });
-      const cutoff = Date.now() - 900000;
-      if (trades.length > 20000 || trades[0]?.ts < cutoff) trades = trades.filter(x => x.ts >= cutoff).slice(-20000);
+      lastWsMessageAt = Date.now();
+      wsMessageCount += 1;
+      const msg = JSON.parse(raw.toString());
+      const t = msg.data || msg;
+      ingestBinanceEvent(t);
     } catch (err) { log('error', `Bad Binance message: ${err.message}`); }
   });
-  ws.on('close', () => { wsConnected = false; log('binance', 'Binance WebSocket disconnected; reconnecting.'); reconnectSoon(); });
-  ws.on('error', err => { wsConnected = false; log('binance-error', err.message || String(err)); reconnectSoon(); });
+  ws.on('close', () => { wsConnected = false; dataWarning = 'WEBSOCKET_CLOSED'; log('binance', 'Binance WebSocket disconnected; reconnecting.'); reconnectSoon(); });
+  ws.on('error', err => { wsConnected = false; dataWarning = 'WEBSOCKET_ERROR'; log('binance-error', err.message || String(err)); reconnectSoon(); });
+}
+
+function ingestBinanceEvent(t) {
+  const eventType = t.e || '';
+  if (eventType === 'aggTrade' || (t.p !== undefined && t.q !== undefined && t.m !== undefined)) {
+    const price = Number(t.p);
+    const qty = Number(t.q);
+    if (!Number.isFinite(price) || !Number.isFinite(qty) || price <= 0 || qty <= 0) return;
+    currentPrice = price;
+    lastPriceSource = 'aggTrade';
+    lastTradeAt = Number(t.T || t.E || Date.now());
+    tradeMessageCount += 1;
+    dataWarning = 'LIVE_BTC_TRADES_OK';
+    price24h.high = price24h.high ? Math.max(price24h.high, price) : price;
+    price24h.low = price24h.low ? Math.min(price24h.low, price) : price;
+    trades.push({ ts: lastTradeAt, price, qty, usd: price * qty, buyerAggressive: t.m === false });
+    const cutoff = Date.now() - 900000;
+    if (trades.length > 25000 || trades[0]?.ts < cutoff) trades = trades.filter(x => x.ts >= cutoff).slice(-25000);
+    return;
+  }
+  // Mark price and mini ticker keep the UI price alive if aggTrade is delayed.
+  const markOrClose = Number(t.p ?? t.c ?? t.markPrice);
+  if (Number.isFinite(markOrClose) && markOrClose > 0) {
+    currentPrice = markOrClose;
+    lastPriceSource = eventType === 'markPriceUpdate' ? 'markPrice' : 'miniTicker';
+    if (!lastTradeAt) dataWarning = 'PRICE_ONLY_WAITING_FOR_AGGTRADES';
+  }
 }
 
 function reconnectSoon() {
   if (wsReconnectTimer) return;
-  wsReconnectTimer = setTimeout(() => { wsReconnectTimer = null; if (running) connectBinance(); }, 3500);
+  wsReconnectTimer = setTimeout(() => {
+    wsReconnectTimer = null;
+    if (!running) return;
+    // Flip between combined stream and raw aggTrade if one connects but stays silent.
+    if (lastTradeAt === 0 && Date.now() - wsOpenAt > 10000) wsMode = wsMode === 'backup' ? 'primary' : 'backup';
+    connectBinance();
+  }, 3500);
+}
+
+async function restDataFallback(now = Date.now()) {
+  if (now - lastRestFallbackAt < 12000) return;
+  lastRestFallbackAt = now;
+  restFallbackCount += 1;
+  try {
+    const [priceRes, aggRes] = await Promise.allSettled([
+      fetch(BINANCE_PRICE_REST, { headers: { 'user-agent': 'whale-hunter-radar/21' } }),
+      fetch(BINANCE_AGG_REST, { headers: { 'user-agent': 'whale-hunter-radar/21' } })
+    ]);
+    if (priceRes.status === 'fulfilled' && priceRes.value.ok) {
+      const p = await priceRes.value.json();
+      const price = Number(p.price);
+      if (Number.isFinite(price) && price > 0) { currentPrice = price; lastPriceSource = 'restTicker'; }
+    }
+    if (aggRes.status === 'fulfilled' && aggRes.value.ok) {
+      const rows = await aggRes.value.json();
+      if (Array.isArray(rows)) {
+        for (const r of rows.slice(-80)) {
+          const price = Number(r.p), qty = Number(r.q), ts = Number(r.T || Date.now());
+          if (!Number.isFinite(price) || !Number.isFinite(qty) || price <= 0 || qty <= 0) continue;
+          if (trades.some(x => x.ts === ts && Math.abs(x.price - price) < 1e-9 && Math.abs(x.qty - qty) < 1e-12)) continue;
+          trades.push({ ts, price, qty, usd: price * qty, buyerAggressive: r.m === false });
+          currentPrice = price; lastTradeAt = ts; lastPriceSource = 'restAggTrades';
+        }
+        tradeMessageCount += rows.length;
+        if (rows.length) dataWarning = 'REST_FALLBACK_BTC_TRADES_OK';
+      }
+    }
+  } catch (err) {
+    dataWarning = `REST_FALLBACK_ERROR: ${err.message}`;
+    log('api-error', dataWarning);
+  }
 }
 
 function labTick() {
+  const now0 = Date.now();
+  if (running && (!lastTradeAt || now0 - lastTradeAt > 15000)) {
+    dataWarning = wsConnected ? 'CONNECTED_BUT_NO_RECENT_BTC_TRADES_USING_FALLBACK' : 'NO_WEBSOCKET_USING_FALLBACK';
+    restDataFallback(now0).catch(() => {});
+    if (wsConnected && wsOpenAt && now0 - wsOpenAt > 14000 && !lastTradeAt) {
+      try { ws?.terminate?.(); } catch {}
+      wsConnected = false;
+      wsMode = wsMode === 'backup' ? 'primary' : 'backup';
+      reconnectSoon();
+    }
+  }
   if (!running || !currentPrice) return;
   scanning = true;
   const now = Date.now();
@@ -754,14 +855,24 @@ function snapshot() {
   const leaderboard = [...bots].sort((a, b) => b.balance - a.balance).slice(0, 20).map(b => ({ id: b.id, name: b.name, balance: round2(b.balance), pnlUsd: round2(b.balance - INITIAL_FAKE_USD), wins: b.wins, losses: b.losses, active: Boolean(b.activeTradeId), reputation: round2(b.reputation), style: b.style }));
   return {
     ok: true,
-    service: 'Whale Hunter Bitcoin Collective Formula Completion V20',
-    mode: 'V20_COLLECTIVE_FORMULA_COMPLETION',
+    service: 'Whale Hunter Bitcoin Collective Formula Completion V21 Live Data Guard',
+    mode: 'V21_COLLECTIVE_FORMULA_LIVE_DATA_GUARD',
     running,
     scanning,
     symbol: BTC,
     price: currentPrice,
     wsConnected,
+    websocketHasTradeData: lastTradeAt > 0 && Date.now() - lastTradeAt < 20000,
+    wsMode,
+    lastWsMessageAt,
+    lastWsMessageAgeMs: lastWsMessageAt ? Date.now() - lastWsMessageAt : null,
+    lastPriceSource,
+    tradeMessageCount,
+    wsMessageCount,
+    restFallbackCount,
+    dataWarning,
     lastTradeAt,
+    lastTradeAgeMs: lastTradeAt ? Date.now() - lastTradeAt : null,
     botCount: BOT_COUNT,
     initialFakeUsd: INITIAL_FAKE_USD,
     totalFakeTreasury: BOT_COUNT * INITIAL_FAKE_USD,
@@ -857,7 +968,7 @@ function round2(n) { return Number(Number(n || 0).toFixed(2)); }
 function round4(n) { return Number(Number(n || 0).toFixed(4)); }
 
 app.listen(PORT, () => {
-  console.log(`Whale Hunter Bitcoin Collective Formula Completion V20 running on :${PORT}`);
+  console.log(`Whale Hunter Bitcoin Collective Formula Completion V21 Live Data Guard running on :${PORT}`);
   log('system', `Server listening on port ${PORT}.`);
   if (AUTOSTART) startLab();
 });
