@@ -304,6 +304,7 @@ app.get('/state', requireViewer, (_req, res) => {
     livingScientistLoop: true,
     tenMinuteLeverageSprint: true,
     quantProofV16: true,
+    twoFormulaV17: true,
     successFormulaLogsV16: true,
     bitcoinOnlyV16: true,
     accessControl: true,
@@ -771,9 +772,6 @@ function createPrediction(contestant, results, cfg, now, fixedFormulaOverride = 
     callsign: contestant.callsign,
     style: contestant.style.name,
     styleKey: contestant.style.key,
-    fixedFormulaId: fixedFormula?.id || null,
-    sourceFormulaOriginalLine: fixedFormula?.originalLine || null,
-    sourceFormulaEquation: fixedFormula?.equation || null,
     styleAr: contestant.style.ar,
     indicator: contestant.style.indicator,
     symbol: signal.symbol,
@@ -2271,9 +2269,6 @@ function createDecisionFormulaReport(contestant, prediction, signal, reading, no
     callsign: contestant.callsign,
     style: contestant.style.name,
     styleKey: contestant.style.key,
-    fixedFormulaId: fixedFormula?.id || null,
-    sourceFormulaOriginalLine: fixedFormula?.originalLine || null,
-    sourceFormulaEquation: fixedFormula?.equation || null,
     styleAr: contestant.style.ar,
     symbol: prediction.symbol,
     direction: prediction.direction,
@@ -2783,7 +2778,7 @@ async function initValidSymbols() {
   // REST exchangeInfo is optional only. If Binance blocks REST from a cloud IP,
   // the game still runs and validates symbols with a safe USDT suffix pattern.
   try {
-    log('api', 'V16 Bitcoin Quant Proof mode: optional exchangeInfo validation starting. REST is not used for scans.');
+    log('api', 'V17 Two Formula Only mode: optional exchangeInfo validation starting. REST is not used for scans.');
     const data = await binanceJson('/fapi/v1/exchangeInfo');
     const symbols = Array.isArray(data.symbols) ? data.symbols : [];
     validSymbols = new Set(
@@ -2806,7 +2801,7 @@ async function initValidSymbols() {
   } catch (error) {
     validSymbols = new Set();
     exchangeInfoLoadedAt = null;
-    log('api-error', `Optional exchangeInfo validation skipped: ${error.message || error}. V16 will continue with BTCUSDT WebSocket data.`);
+    log('api-error', `Optional exchangeInfo validation skipped: ${error.message || error}. V17 will continue with BTCUSDT WebSocket data.`);
     const normalized = await normalizeConfig(config);
     config = normalized.config;
     ensureTradeStreams(config.symbols);
@@ -3146,6 +3141,6 @@ app.listen(PORT, () => {
     running = true;
     scheduleNextScan(9000);
   }
-  log('server', `Whale Hunter Bitcoin Quant Proof V16 online on port ${PORT}. Bitcoin-only BTCUSDT autonomous quant-proof fake-leverage sprint: 500 bots, $1000 fake each. Page is viewer only. Monitoring only. No API keys. No real trading.`);
+  log('server', `Whale Hunter Bitcoin Two Formula Only V17 online on port ${PORT}. BTCUSDT only, exactly two locked formulas, fake-money paper arena. Monitoring only. No API keys. No real trading.`);
   broadcast('status', { running, scanning, autostart: AUTOSTART, timestamp: Date.now() });
 });
