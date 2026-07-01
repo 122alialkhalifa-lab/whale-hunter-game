@@ -49,6 +49,51 @@ const FIXED_FORMULA_LIBRARY = Object.freeze({
   }
 });
 const FIXED_FORMULAS = Object.freeze([FIXED_FORMULA_LIBRARY.UP_TAKER_BUY, FIXED_FORMULA_LIBRARY.DOWN_DOGFIGHT]);
+const FORMULA_FINGERPRINT_MIN_SIMILARITY = Number(process.env.FORMULA_FINGERPRINT_MIN_SIMILARITY || 90);
+const FORMULA_FINGERPRINTS = Object.freeze({
+  UP_TAKER_BUY_RADAR_001: {
+    label: 'Radar-001 TAKER_BUY UP reference fingerprint',
+    strictReason: 'لا تدخل UP إلا إذا السوق الحالي يشبه بصمة صفقة Radar-001 الرابحة، وليس لأن معادلة النتيجة موجودة فقط.',
+    expectedMovePct: 0.1703,
+    terms: [
+      { feature: 'BUY_IMBALANCE', target: 0.66, tolerance: 0.34, weight: 2.4, ar: 'ضغط شراء عدواني قريب من بصمة TAKER_BUY' },
+      { feature: 'BIG_BUY', target: 0.90, tolerance: 0.85, weight: 1.8, ar: 'وجود شراء كبير قبل الحركة' },
+      { feature: 'BIG_SELL', target: 0.12, tolerance: 0.65, weight: 1.2, ar: 'ضعف البيع الكبير قبل الصعود' },
+      { feature: 'NET_WHALE', target: 0.62, tolerance: 0.80, weight: 1.6, ar: 'صافي الحوت يميل للشراء' },
+      { feature: 'FLOW', target: 0.82, tolerance: 0.90, weight: 1.2, ar: 'تدفق كافٍ بدون فوضى زائدة' },
+      { feature: 'RANGE_LOCK', target: 0.58, tolerance: 0.60, weight: 1.2, ar: 'النطاق مضغوط بما يشبه لحظة الربح' },
+      { feature: 'PRICE_LIFT', target: 0.14, tolerance: 0.32, weight: 1.4, ar: 'رفع سعري مبكر قريب من move=0.1703%' },
+      { feature: 'WHALE_COUNT', target: 0.35, tolerance: 0.50, weight: 0.8, ar: 'وجود أثر صفقات حيتان' }
+    ],
+    guards: [
+      { key: 'buyPct', op: '>=', value: 0.58, penalty: 18, ar: 'Buy% أقل من حد بصمة الشراء' },
+      { key: 'priceChangePct', op: '>=', value: -0.05, penalty: 12, ar: 'السعر لا يؤكد بصمة UP' },
+      { key: 'bigSellVsBigBuy', op: '<=', value: 1.10, penalty: 18, ar: 'Big Sell يضغط على نموذج TAKER_BUY' }
+    ]
+  },
+  DOWN_DOGFIGHT_RADAR_013: {
+    label: 'Radar-013 DOGFIGHT DOWN reference fingerprint',
+    strictReason: 'لا تدخل DOWN إلا إذا السوق الحالي يشبه بصمة صفقة Radar-013 الرابحة، وليس لأن معادلة النتيجة موجودة فقط.',
+    expectedMovePct: -0.1871,
+    terms: [
+      { feature: 'BUY_IMBALANCE', target: -0.30, tolerance: 0.45, weight: 2.0, ar: 'اختلال يميل للبيع أو ضعف شراء واضح' },
+      { feature: 'BIG_SELL', target: 0.85, tolerance: 0.85, weight: 2.0, ar: 'بيع كبير قبل الهبوط' },
+      { feature: 'BIG_BUY', target: 0.18, tolerance: 0.70, weight: 1.0, ar: 'ضعف الشراء الكبير' },
+      { feature: 'NET_WHALE', target: -0.55, tolerance: 0.80, weight: 1.8, ar: 'صافي الحوت يميل للبيع' },
+      { feature: 'FLOW', target: 0.78, tolerance: 0.90, weight: 1.1, ar: 'معركة تدفق كافية DOGFIGHT' },
+      { feature: 'RANGE_LOCK', target: 0.42, tolerance: 0.70, weight: 1.0, ar: 'النطاق غير منفلت قبل الهبوط' },
+      { feature: 'PRICE_LIFT', target: -0.16, tolerance: 0.35, weight: 1.5, ar: 'ميل سعري سلبي قريب من move=-0.1871%' },
+      { feature: 'WHALE_COUNT', target: 0.30, tolerance: 0.55, weight: 0.8, ar: 'أثر صفقات كبيرة داخل المعركة' }
+    ],
+    guards: [
+      { key: 'buyPct', op: '<=', value: 0.56, penalty: 16, ar: 'Buy% مرتفع جدًا على بصمة DOWN' },
+      { key: 'priceChangePct', op: '<=', value: 0.08, penalty: 12, ar: 'السعر يرفع عكس بصمة DOGFIGHT DOWN' },
+      { key: 'bigBuyVsBigSell', op: '<=', value: 1.15, penalty: 18, ar: 'Big Buy يتغلب على نموذج الهبوط' }
+    ]
+  }
+});
+let lastFormulaMatches = new Map();
+let formulaSkipLogAt = new Map();
 const MAX_SYMBOLS = 1;
 const WS_SUBSCRIBE_CHUNK = Number(process.env.WS_SUBSCRIBE_CHUNK || 180);
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 9000);
@@ -174,9 +219,10 @@ app.get('/health', (_req, res) => {
     fixedFormulas: fixedFormulaStatus(),
     scanning,
     timestamp: Date.now(),
-    service: 'Whale Hunter Bitcoin Two Formula Only V17',
+    service: 'Whale Hunter Bitcoin Two Formula Fingerprint V18',
     websocketConnected: wsState.connected,
-    publicHealthOnly: true
+    publicHealthOnly: true,
+    formulaFingerprintMinSimilarity: FORMULA_FINGERPRINT_MIN_SIMILARITY
   });
 });
 
@@ -304,7 +350,7 @@ app.get('/state', requireViewer, (_req, res) => {
     livingScientistLoop: true,
     tenMinuteLeverageSprint: true,
     quantProofV16: true,
-    twoFormulaV17: true,
+    twoFormulaFingerprintV18: true,
     successFormulaLogsV16: true,
     bitcoinOnlyV16: true,
     accessControl: true,
@@ -689,8 +735,132 @@ function fixedFormulaStatus() {
     direction: f.direction,
     leverage: f.leverage,
     equation: f.equation,
-    originalLine: f.originalLine
+    originalLine: f.originalLine,
+    fingerprint: {
+      minSimilarity: FORMULA_FINGERPRINT_MIN_SIMILARITY,
+      label: FORMULA_FINGERPRINTS[f.id]?.label || f.styleKey,
+      expectedMovePct: FORMULA_FINGERPRINTS[f.id]?.expectedMovePct ?? null,
+      strictReason: FORMULA_FINGERPRINTS[f.id]?.strictReason || null,
+      terms: (FORMULA_FINGERPRINTS[f.id]?.terms || []).map(t => ({ feature: t.feature, target: t.target, tolerance: t.tolerance, weight: t.weight, ar: t.ar }))
+    },
+    lastMatch: lastFormulaMatches.get(f.id) || null
   }));
+}
+
+function getLiveGuardValue(key, signal) {
+  const bigBuy = Number(signal.bigBuyUsd || 0);
+  const bigSell = Number(signal.bigSellUsd || 0);
+  if (key === 'buyPct') return Number(signal.buyPct || 0);
+  if (key === 'priceChangePct') return Number(signal.priceChangePct || 0);
+  if (key === 'bigSellVsBigBuy') return bigSell / Math.max(1, bigBuy);
+  if (key === 'bigBuyVsBigSell') return bigBuy / Math.max(1, bigSell);
+  return 0;
+}
+
+function guardPass(value, op, target) {
+  if (op === '>=') return value >= target;
+  if (op === '<=') return value <= target;
+  if (op === '>') return value > target;
+  if (op === '<') return value < target;
+  return true;
+}
+
+function evaluateFormulaFingerprintMatch(fixedFormula, signal, cfg = config) {
+  const fingerprint = FORMULA_FINGERPRINTS[fixedFormula.id];
+  const vector = featureVectorFromSignal(signal || {});
+  if (!fingerprint || !signal?.price) {
+    return {
+      formulaId: fixedFormula.id,
+      allowed: false,
+      similarity: 0,
+      minSimilarity: FORMULA_FINGERPRINT_MIN_SIMILARITY,
+      reason: 'لا توجد بيانات كافية لمقارنة البصمة المرجعية.',
+      vector,
+      terms: [],
+      penalties: []
+    };
+  }
+
+  let totalWeight = 0;
+  let weighted = 0;
+  const terms = [];
+  for (const term of fingerprint.terms || []) {
+    const actual = Number(vector[term.feature] ?? 0);
+    const target = Number(term.target ?? 0);
+    const tolerance = Math.max(0.0001, Number(term.tolerance ?? 1));
+    const weight = Math.max(0.0001, Number(term.weight ?? 1));
+    const distance = Math.abs(actual - target);
+    const closeness = clamp(1 - distance / tolerance, 0, 1);
+    const product = closeness * weight;
+    totalWeight += weight;
+    weighted += product;
+    terms.push({
+      feature: term.feature,
+      actual: Number(actual.toFixed(4)),
+      target: Number(target.toFixed(4)),
+      tolerance: Number(tolerance.toFixed(4)),
+      weight: Number(weight.toFixed(4)),
+      closeness: Number((closeness * 100).toFixed(2)),
+      product: Number(product.toFixed(4)),
+      ar: term.ar || term.feature
+    });
+  }
+
+  let similarity = totalWeight > 0 ? (weighted / totalWeight) * 100 : 0;
+  const penalties = [];
+  for (const guard of fingerprint.guards || []) {
+    const value = getLiveGuardValue(guard.key, signal);
+    const ok = guardPass(value, guard.op, guard.value);
+    if (!ok) {
+      similarity -= Number(guard.penalty || 0);
+      penalties.push({
+        key: guard.key,
+        op: guard.op,
+        expected: guard.value,
+        actual: Number(value.toFixed(4)),
+        penalty: Number(guard.penalty || 0),
+        ar: guard.ar || guard.key
+      });
+    }
+  }
+  similarity = Number(clamp(similarity, 0, 100).toFixed(2));
+  const minSimilarity = FORMULA_FINGERPRINT_MIN_SIMILARITY;
+  const allowed = similarity >= minSimilarity;
+  const strongest = [...terms].sort((a, b) => b.product - a.product).slice(0, 4);
+  const weakest = [...terms].sort((a, b) => a.closeness - b.closeness).slice(0, 3);
+  const match = {
+    formulaId: fixedFormula.id,
+    styleKey: fixedFormula.styleKey,
+    direction: fixedFormula.direction,
+    symbol: signal.symbol || BTC_ONLY_SYMBOL,
+    timestamp: Date.now(),
+    allowed,
+    similarity,
+    minSimilarity,
+    status: allowed ? 'REFERENCE_MATCH' : 'NO_TRADE_NOT_SIMILAR',
+    reason: allowed
+      ? `السوق الحالي يشبه بصمة ${fixedFormula.originalBot} بنسبة ${similarity}%.` 
+      : `لا دخول: التشابه ${similarity}% أقل من الحد ${minSimilarity}%.`,
+    strictReason: fingerprint.strictReason,
+    expectedMovePct: fingerprint.expectedMovePct,
+    vector,
+    terms,
+    strongest,
+    weakest,
+    penalties,
+    live: {
+      price: signal.price,
+      buyPct: Number(((signal.buyPct || 0) * 100).toFixed(2)),
+      priceChangePct: Number((signal.priceChangePct || 0).toFixed(4)),
+      bigBuyUsd: Number(signal.bigBuyUsd || 0),
+      bigSellUsd: Number(signal.bigSellUsd || 0),
+      netWhale: Number(signal.netWhale || 0),
+      score: Number(signal.score || 0),
+      rangePct: Number(signal.priceRangePct || 0)
+    }
+  };
+  lastFormulaMatches.set(fixedFormula.id, match);
+  return match;
 }
 
 function updateArena(results, cfg, now) {
@@ -718,16 +888,23 @@ function updateArena(results, cfg, now) {
 
   if (Array.isArray(results) && results.length) {
     if (TWO_FORMULA_ONLY_MODE) {
+      const candidates = [];
       for (const fixedFormula of FIXED_FORMULAS) {
         if (activeFormulaKeys.has(fixedFormula.id)) continue;
         const contestant = getFixedFormulaContestant(fixedFormula.styleKey);
         if (!contestant || activeContestants.has(contestant.id)) continue;
         const prediction = createPrediction(contestant, results, cfg, now, fixedFormula);
         if (!prediction) continue;
+        candidates.push(prediction);
+      }
+      // لا نفتح LONG و SHORT في نفس اللحظة على نفس BTC بصمتين متضادتين؛ نأخذ أعلى تشابه مرجعي فقط.
+      candidates.sort((a, b) => (b.formulaMatch?.similarity || 0) - (a.formulaMatch?.similarity || 0));
+      for (const prediction of candidates.slice(0, 1)) {
+        const contestant = contestants[prediction.contestantId - 1];
         contestant.pending += 1;
         activePredictions.push(prediction);
         activeContestants.add(contestant.id);
-        activeFormulaKeys.add(fixedFormula.id);
+        if (prediction.fixedFormulaId) activeFormulaKeys.add(prediction.fixedFormulaId);
         createdThisScan.push(prediction);
       }
     } else {
@@ -765,6 +942,14 @@ function createPrediction(contestant, results, cfg, now, fixedFormulaOverride = 
 
   const { signal, reading } = best;
   const fixedFormula = fixedFormulaOverride || reading.fixedFormula || getFixedFormulaByStyleKey(contestant.style?.key);
+  if (fixedFormula && reading.fixedFormulaMatch && !reading.fixedFormulaMatch.allowed) {
+    const lastSkipLog = formulaSkipLogAt.get(fixedFormula.id) || 0;
+    if (Date.now() - lastSkipLog > 30000) {
+      log('formula-watch', `${fixedFormula.id} skipped: ${reading.fixedFormulaMatch.reason}`);
+      formulaSkipLogAt.set(fixedFormula.id, Date.now());
+    }
+    return null;
+  }
   const direction = fixedFormula?.direction || reading.direction;
   const prediction = {
     id: randomUUID(),
@@ -786,6 +971,11 @@ function createPrediction(contestant, results, cfg, now, fixedFormulaOverride = 
     signalSnapshot: signalFeatureSnapshot(signal),
     signalKey: makeSignalKeyFromSnapshot(signal.symbol, cfg.windowSec, direction, featureVectorFromSignal(signal), signal.timestamp || now),
     formula: reading.formula || null,
+    formulaMatch: reading.fixedFormulaMatch || null,
+    fixedFormulaId: fixedFormula?.id || reading.formula?.fixedFormulaId || null,
+    sourceFormulaOriginalLine: fixedFormula?.originalLine || reading.formula?.fixedFormulaOriginalLine || null,
+    sourceFormulaEquation: fixedFormula?.equation || reading.formula?.fixedFormulaEquation || null,
+    fixedLeverage: fixedFormula?.leverage || reading.formula?.fixedLeverage || null,
     hiveContext: reading.hiveContext || null,
     paperTrade: null,
     status: 'OPEN'
@@ -821,12 +1011,10 @@ function readSignal(contestant, signal, cfg) {
   let basis = fixedFormula?.entryNote || contestant.style.desc;
 
   if (fixedFormula) {
-    // In Two Formula Only Mode, the game is not allowed to invent new strategies.
-    // It repeatedly opens only the two user-approved BTCUSDT formula templates.
-    const directionalPressure = fixedFormula.direction === 'UP'
-      ? buyPct + Math.max(0, lift) * 18 + buyUnits * 5 - sellUnits * 2
-      : (100 - buyPct) + Math.max(0, -lift) * 18 + sellUnits * 5 - buyUnits * 2;
-    conviction = clamp(Math.round(62 + score * 0.18 + directionalPressure * 0.18), 55, 100);
+    // Two Formula Reference-Fingerprint Mode:
+    // المعادلتان الأصليتان تبقيان حرفيًا للتقييم، لكن الدخول لا يحدث إلا إذا السوق الحالي يشبه بصمة الربح الأصلية.
+    const match = evaluateFormulaFingerprintMatch(fixedFormula, signal, cfg);
+    const conviction = clamp(Math.round(match.similarity), 0, 100);
     const formula = {
       equation: fixedFormula.originalLine,
       latex: fixedFormula.direction === 'UP'
@@ -835,27 +1023,33 @@ function readSignal(contestant, signal, cfg) {
       raw: null,
       pressure: conviction,
       terms: [
-        { feature: 'FIXED_FORMULA', w: 1, value: 1, product: 1 },
-        { feature: fixedFormula.styleKey, w: 1, value: 1, product: 1 },
-        { feature: 'BTCUSDT_ONLY', w: 1, value: 1, product: 1 }
+        { feature: 'REFERENCE_SIMILARITY', w: 1, value: match.similarity / 100, product: match.similarity / 100 },
+        { feature: 'MIN_REQUIRED', w: 1, value: match.minSimilarity / 100, product: match.minSimilarity / 100 },
+        ...match.terms.slice(0, 6).map(t => ({ feature: t.feature, w: t.weight, value: t.actual, target: t.target, product: Number((t.product || 0).toFixed(4)), closeness: t.closeness }))
       ],
-      vector: featureVectorFromSignal(signal),
+      vector: match.vector,
       baseStyle: fixedFormula.styleKey,
       finalConviction: conviction,
-      finalDirection: fixedFormula.direction,
+      finalDirection: match.allowed ? fixedFormula.direction : 'WATCH',
       fixedFormulaId: fixedFormula.id,
       fixedFormulaOriginalLine: fixedFormula.originalLine,
       fixedFormulaEquation: fixedFormula.equation,
-      fixedLeverage: fixedFormula.leverage
+      fixedLeverage: fixedFormula.leverage,
+      fingerprintSimilarity: match.similarity,
+      fingerprintAllowed: match.allowed,
+      fingerprintReason: match.reason
     };
     return {
       conviction,
-      direction: fixedFormula.direction,
-      basis: `${fixedFormula.entryNote} Original equation locked حرفيًا.`,
-      hiveContext: { boost: 0, note: 'fixed formula only' },
-      mathContext: { boost: 0, note: 'no invented model' },
+      direction: match.allowed ? fixedFormula.direction : 'WATCH',
+      basis: match.allowed
+        ? `${fixedFormula.entryNote} ${match.reason} Original equation locked حرفيًا.`
+        : `${match.reason} ${fixedFormula.entryNote} لا يوجد دخول وهمي حتى تعود البصمة.`,
+      hiveContext: { boost: 0, note: 'reference fingerprint only' },
+      mathContext: { boost: 0, note: match.allowed ? 'entry fingerprint matched' : 'entry fingerprint rejected' },
       formula,
-      fixedFormula
+      fixedFormula,
+      fixedFormulaMatch: match
     };
   }
 
@@ -2277,13 +2471,16 @@ function createDecisionFormulaReport(contestant, prediction, signal, reading, no
     sourceFormulaOriginalLine: prediction.sourceFormulaOriginalLine || formula.fixedFormulaOriginalLine || null,
     sourceFormulaEquation: prediction.sourceFormulaEquation || formula.fixedFormulaEquation || null,
     fixedFormulaId: prediction.fixedFormulaId || formula.fixedFormulaId || null,
+    formulaMatch: prediction.formulaMatch || null,
     latex: formula.latex,
     terms: formula.terms,
     vector: formula.vector,
     result: 'OPEN',
     pnl: 0,
     message: `${contestant.callsign} نشر معادلة قرار على ${prediction.symbol}: ${formula.equation}`,
-    teaching: `أراقب ${prediction.symbol} بهدف سباق 10 دقائق؛ الرافعة الوهمية ${prediction.paperTrade?.leverage || 1}x، وأعلى حدود المعادلة: ${formula.terms.map(t => `${t.feature}=${t.product}`).join(', ') || 'لا توجد حدود قوية'}.`
+    teaching: prediction.formulaMatch
+      ? `${prediction.formulaMatch.reason} أعلى حدود التشابه: ${(prediction.formulaMatch.strongest || []).map(t => `${t.feature}=${t.closeness}%`).join(', ') || 'لا توجد'}.`
+      : `أراقب ${prediction.symbol} بهدف سباق 10 دقائق؛ الرافعة الوهمية ${prediction.paperTrade?.leverage || 1}x، وأعلى حدود المعادلة: ${formula.terms.map(t => `${t.feature}=${t.product}`).join(', ') || 'لا توجد حدود قوية'}.`
   };
 }
 
@@ -2778,7 +2975,7 @@ async function initValidSymbols() {
   // REST exchangeInfo is optional only. If Binance blocks REST from a cloud IP,
   // the game still runs and validates symbols with a safe USDT suffix pattern.
   try {
-    log('api', 'V17 Two Formula Only mode: optional exchangeInfo validation starting. REST is not used for scans.');
+    log('api', 'V18 Formula Fingerprint mode: optional exchangeInfo validation starting. REST is not used for scans.');
     const data = await binanceJson('/fapi/v1/exchangeInfo');
     const symbols = Array.isArray(data.symbols) ? data.symbols : [];
     validSymbols = new Set(
@@ -2801,7 +2998,7 @@ async function initValidSymbols() {
   } catch (error) {
     validSymbols = new Set();
     exchangeInfoLoadedAt = null;
-    log('api-error', `Optional exchangeInfo validation skipped: ${error.message || error}. V17 will continue with BTCUSDT WebSocket data.`);
+    log('api-error', `Optional exchangeInfo validation skipped: ${error.message || error}. V18 will continue with BTCUSDT WebSocket data.`);
     const normalized = await normalizeConfig(config);
     config = normalized.config;
     ensureTradeStreams(config.symbols);
@@ -3141,6 +3338,6 @@ app.listen(PORT, () => {
     running = true;
     scheduleNextScan(9000);
   }
-  log('server', `Whale Hunter Bitcoin Two Formula Only V17 online on port ${PORT}. BTCUSDT only, exactly two locked formulas, fake-money paper arena. Monitoring only. No API keys. No real trading.`);
+  log('server', `Whale Hunter Bitcoin Formula Fingerprint V18 online on port ${PORT}. BTCUSDT only, two locked formulas as reference fingerprints, fake-money paper arena. Monitoring only. No API keys. No real trading.`);
   broadcast('status', { running, scanning, autostart: AUTOSTART, timestamp: Date.now() });
 });

@@ -1,47 +1,58 @@
-# Whale Hunter Radar — Bitcoin Two Formula Only V17
+# Whale Hunter Radar — Bitcoin Two Formula Fingerprint V18
 
-نسخة BTCUSDT فقط، مقفلة على معادلتين فقط كما طلبت. لا يوجد أي نموذج ثالث ولا تجربة استراتيجية جديدة.
+نسخة Bitcoin-only مبنية على فكرتك الأخيرة:
 
-## المعادلتان المسموحتان حرفيًا
+- المعادلتان الأصليتان محفوظتان حرفيًا كـ **Reference Winning Formulas**.
+- لا يتم التداول الوهمي بمجرد وجود المعادلة.
+- يتم التداول الوهمي فقط إذا السوق الحالي يشبه بصمة صفقة الربح الأصلية بنسبة عالية.
+- الافتراضي: `FORMULA_FINGERPRINT_MIN_SIMILARITY=90`.
+- إذا التشابه أقل من 90%، تعرض اللعبة السبب ولا تفتح صفقة وهمية.
+- إذا تشابه UP و DOWN في نفس اللحظة، يتم اختيار الأعلى تشابهًا فقط لتجنب Long/Short عكسيين على نفس BTC.
 
-### 1) BTCUSDT DOWN — DOGFIGHT — 8x
+## الصيغة الصحيحة
+
+المعادلتان اللتان زودتني بهما تبقيان كما هما للتقييم بعد الصفقة:
 
 ```text
-[2026-06-30T22:38:22.424Z] BTCUSDT DOWN | Radar-013 المرصاد DOGFIGHT | WIN net=0.5379% gross=1.4970% fees+slip=0.9591% move=-0.1871% lev=8x | pattern=1/1 PERFECT_SO_FAR | equation: gross=1.4970% - fees=0.6394% - slippage=0.3197% => net=0.5379%; result=WIN; R=0.7250; Δwᵢ=η·R·xᵢ
+BTCUSDT UP | Radar-001 الغواص TAKER_BUY
+WIN net=0.6171% gross=2.0943% fees+slip=1.4772% move=0.1703% lev=12.3x
+result=WIN; R=0.7874; Δwᵢ=η·R·xᵢ
 ```
-
-### 2) BTCUSDT UP — TAKER_BUY — 12.3x
 
 ```text
-[2026-06-30T22:08:20.304Z] BTCUSDT UP | Radar-001 الغواص TAKER_BUY | WIN net=0.6171% gross=2.0943% fees+slip=1.4772% move=0.1703% lev=12.3x | pattern=1/1 PERFECT_SO_FAR | equation: gross=2.0943% - fees=0.9848% - slippage=0.4924% => net=0.6171%; result=WIN; R=0.7874; Δwᵢ=η·R·xᵢ
+BTCUSDT DOWN | Radar-013 المرصاد DOGFIGHT
+WIN net=0.5379% gross=1.4970% fees+slip=0.9591% move=-0.1871% lev=8x
+result=WIN; R=0.7250; Δwᵢ=η·R·xᵢ
 ```
 
-## منطق التداول الوهمي
+لكن الدخول الآن يعتمد على:
 
-- اللعبة تستخدم BTCUSDT فقط.
-- السيرفر يقرأ Binance Futures WebSocket الحقيقي لـ `btcusdt@aggTrade`.
-- التداول وهمي بالكامل داخل اللعبة.
-- لا API keys.
+```text
+similarity(current_market, reference_fingerprint) >= FORMULA_FINGERPRINT_MIN_SIMILARITY
+```
+
+## بيانات Binance
+
+- السعر والحركة والتدفق من Binance USDⓈ-M Futures WebSocket الحقيقي.
+- يستخدم BTCUSDT فقط.
+- لا Binance API keys.
 - لا أوامر شراء أو بيع حقيقية.
-- لا يوجد auto-trading حقيقي.
-- كل جولة تفتح فقط صيغتين وهميتين: UP/TAKER_BUY و DOWN/DOGFIGHT.
-- الرافعة ثابتة حسب المعادلة:
-  - UP = 12.3x
-  - DOWN = 8x
-- التقييم صار Strict:
-  - WATCH لا يحسب win.
-  - الربح لا يحسب win إلا بعد الرسوم والانزلاق.
-  - `R = 0` إذا النتيجة NEUTRAL أو WATCH.
-  - `TRADE_PROOF = real_wins / real_closed_trials` فقط.
+- التداول، الرافعة، الأرباح والخسائر كلها وهمية داخل اللعبة.
 
-## تشغيل
+## Environment Variables اختيارية
 
-```bash
-npm install
-npm start
+```text
+OWNER_PIN=OWNER-7777
+VIEWER_PIN=VIEW-1111
+AUTH_SECRET=change-this-secret-in-render
+FORMULA_FINGERPRINT_MIN_SIMILARITY=90
+PAPER_FEE_BPS=4
+PAPER_SLIPPAGE_BPS=2
+MIN_NET_PROFIT_PCT=0.05
+MAX_NEUTRAL_LOSS_PCT=0.05
 ```
 
-## Render
+## تشغيل Render
 
 Build Command:
 
@@ -55,29 +66,9 @@ Start Command:
 node server.mjs
 ```
 
-## Access
+## فحص
 
-Default owner PIN:
-
-```text
-OWNER-7777
-```
-
-Default viewer PIN:
-
-```text
-VIEW-1111
-```
-
-غيّرها من Render Environment Variables:
-
-```text
-OWNER_PIN=your-owner-pin
-VIEWER_PIN=your-viewer-pin
-AUTH_SECRET=long-secret
-```
-
-## Health
+افتح:
 
 ```text
 /health
@@ -86,9 +77,9 @@ AUTH_SECRET=long-secret
 لازم تشوف:
 
 ```json
-{"ok":true,"websocketConnected":true,"twoFormulaOnlyMode":true}
+"ok": true,
+"twoFormulaOnlyMode": true,
+"websocketConnected": true,
+"formulaFingerprintMinSimilarity": 90
 ```
 
-## Safety
-
-مراقبة وتداول وهمي فقط. ليست توصية مالية. الرافعة قد تصفّر الحساب الحقيقي.

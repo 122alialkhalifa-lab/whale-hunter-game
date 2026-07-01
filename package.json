@@ -1,7 +1,7 @@
 {
-  "name": "whale-hunter-bitcoin-two-formula-v17",
-  "version": "17.0.0",
-  "description": "Bitcoin-only Binance Futures paper arena locked to exactly two user-approved formulas: BTCUSDT UP TAKER_BUY and BTCUSDT DOWN DOGFIGHT.",
+  "name": "whale-hunter-bitcoin-formula-fingerprint-v18",
+  "version": "18.0.0",
+  "description": "Bitcoin-only Binance Futures paper arena using exactly two user-approved formulas as reference fingerprints before any paper trade.",
   "type": "module",
   "main": "server.mjs",
   "scripts": {
@@ -24,7 +24,7 @@
     "paper-trading-simulation",
     "fake-money",
     "two-formula-only",
-    "fixed-formula",
+    "reference-fingerprint",
     "strict-evaluation",
     "no-api-keys",
     "no-real-trading"
