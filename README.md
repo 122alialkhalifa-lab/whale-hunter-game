@@ -1,4 +1,4 @@
-# Whale Hunter Radar — Bitcoin Collective Formula Completion + Live Data Guard V21
+# Whale Hunter Radar — Bitcoin Collective Formula Completion + Strict Live Trade Guard V22
 
 نسخة BTCUSDT فقط. هذه النسخة لا تستخدم المعادلتين كأوامر دخول مباشرة، بل تستخدمهما كبذور رياضية ناقصة. كل Bot يحاول إضافة قطعة من المعادلة حتى يرتفع التشابه تدريجيًا من 17–25% إلى 50% ثم 70% ثم 90%+ من خلال تجارب Paper Trading حية على بيانات Binance Futures.
 
@@ -108,6 +108,13 @@ VIEW-1111
 هذه لعبة مراقبة وتجارب وهمية فقط. لا توجد مفاتيح Binance ولا أوامر تداول حقيقية ولا ادعاء ضمان ربح.
 
 
-## V21 Live Data Guard
+## V22 Strict Live Trade Guard
 
 هذه النسخة لا تكتفي بـ websocketConnected. تضيف lastTradeAt, lastTradeAgeMs, lastPriceSource, tradeMessageCount, wsMessageCount, dataWarning، وتستخدم fallback خفيف إذا كان الاتصال مفتوحًا لكن لا تصل صفقات BTC.
+
+
+## V22 fix
+
+V22 يمنع فتح تجارب وهمية أو احتساب خسائر إذا كان السعر موجودًا فقط من REST ticker بدون صفقات BTC حديثة. لا يبدأ Equation Hunter إلا إذا كان `tradableDataReady=true` وفيه عدد كافٍ من صفقات BTC الفعلية داخل نافذة القراءة.
+
+Health fields المهمة: `tradableDataReady`, `lastTradeAgeMs`, `tradeMessageCount`, `restAggTradeCount`, `restRecentTradeCount`, `lastRestError`, `dataWarning`.

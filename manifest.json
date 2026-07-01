@@ -1,19 +1,12 @@
 {
-  "name": "Whale Hunter Bitcoin Two Formula V17",
-  "short_name": "BTCFormulaV17",
-  "description": "BTCUSDT-only Binance Futures paper simulation locked to two user-approved formulas. Real market data, fake trading only.",
+  "name": "Whale Hunter Bitcoin Collective Formula Completion",
+  "short_name": "BTC Formula Lab",
   "start_url": "/",
-  "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#050711",
   "theme_color": "#00e5ff",
+  "orientation": "portrait",
   "icons": [
-    {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
   ]
 }
